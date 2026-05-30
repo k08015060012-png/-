@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>在庫検索</title>
+
+<!-- PWA -->
+<link rel="manifest" href="./manifest.json">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="在庫検索">
+<meta name="theme-color" content="#2563eb">
+<link rel="apple-touch-icon" href="./icons/icon-180.png">
+<link rel="apple-touch-icon" sizes="152x152" href="./icons/icon-152.png">
+<link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png">
+
+<!-- iPad スプラッシュ画面 -->
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+  @media (display-mode: standalone) {
+    body { padding-top: env(safe-area-inset-top); }
+    .app-header { padding-top: max(0px, env(safe-area-inset-top)); }
+  }
+</style>
+<style>
+  :root {
+    --primary: #2563eb;
+    --primary-dark: #1d4ed8;
+    --primary-light: #dbeafe;
+    --surface: #ffffff;
+    --surface-2: #f8fafc;
+    --surface-3: #f1f5f9;
+    --border: #e2e8f0;
+    --text: #0f172a;
+    --text-2: #475569;
+    --text-3: #94a3b8;
+    --success: #10b981;
+    --danger: #ef4444;
+    --warning: #f59e0b;
+    --radius: 16px;
+    --radius-sm: 10px;
+    --shadow: 0 1px 3px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.06);
+    --shadow-lg: 0 8px 32px rgba(0,0,0,.12);
+    --nav-h: 64px;
+    --header-h: 56px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: -apple-system, 'Hiragino Sans', 'Meiryo', sans-serif;
+    background: var(--surface-2);
+    color: var(--text);
+    min-height: 100vh;
+    overscroll-behavior: none;
+  }
+
+  /* ─── LOGIN ─── */
+  #loginScreen {
+    position: fixed; inset: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(160deg, #1e3a5f 0%, #2563eb 60%, #60a5fa 100%);
+    padding: 24px;
+  }
+  .login-card {
+    background: white; border-radius: 24px;
+    padding: 36px 28px; width: 100%; max-width: 360px;
+    box-shadow: 0 24px 64px rgba(0,0,0,.25);
+  }
+  .login-logo {
+    text-align: center; margin-bottom: 28px;
+  }
+  .login-logo .icon {
+    width: 64px; height: 64px; border-radius: 18px;
+    background: var(--primary); display: inline-flex;
+    align-items: center; justify-content: center;
+    font-size: 30px; margin-bottom: 12px;
+    box-shadow: 0 8px 20px rgba(37,99,235,.4);
+  }
+  .login-logo h1 { font-size: 20px; font-weight: 700; color: var(--text); }
+  .login-logo p { font-size: 13px; color: var(--text-3); margin-top: 4px; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; font-weight: 600; color: var(--text-2); margin-bottom: 6px; }
+  .field input {
+    width: 100%; padding: 13px 16px;
+    border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+    font-size: 15px; color: var(--text); background: var(--surface-2);
+    transition: border-color .15s;
+  }
+  .field input:focus { outline: none; border-color: var(--primary); background: white; }
+  .btn-login {
+    width: 100%; padding: 14px; margin-top: 6px;
+    background: var(--primary); color: white; border: none;
+    border-radius: var(--radius-sm); font-size: 15px; font-weight: 700;
+    cursor: pointer; transition: background .15s, transform .1s;
+    box-shadow: 0 4px 14px rgba(37,99,235,.4);
+  }
+  .btn-login:active { transform: scale(.98); background: var(--primary-dark); }
+  .login-error {
+    color: var(--danger); font-size: 13px; text-align: center;
+    margin-top: 10px; min-height: 18px;
+  }
+  .login-hint {
+    margin-top: 16px; padding: 12px 14px;
+    background: var(--surface-2); border-radius: var(--radius-sm);
+    font-size: 12px; color: var(--text-2); line-height: 1.7;
+    border: 1px solid var(--border);
+  }
+
+  /* ─── APP SHELL ─── */
+  #app { display: none; height: 100vh; display: none; flex-direction: column; }
+  #app.visible { display: flex; }
+
+  /* ─── HEADER ─── */
+  .app-header {
+    height: var(--header-h); background: white;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 16px;
+    position: sticky; top: 0; z-index: 50;
+    gap: 12px;
+  }
+  .header-title { flex: 1; }
+  .header-title h1 { font-size: 17px; font-weight: 700; }
+  .header-title p { font-size: 11px; color: var(--text-3); margin-top: 1px; }
+  .header-actions { display: flex; gap: 8px; align-items: center; }
+  .icon-btn {
+    width: 36px; height: 36px; border-radius: 10px;
+    border: none; background: var(--surface-3); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; transition: background .15s;
+  }
+  .icon-btn:active { background: var(--border); }
+
+  /* ─── TAB BAR ─── */
+  .tab-bar {
+    display: flex; gap: 6px; padding: 10px 16px;
+    background: white; border-bottom: 1px solid var(--border);
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .tab-bar::-webkit-scrollbar { display: none; }
+  .tab-pill {
+    flex-shrink: 0; padding: 7px 16px;
+    border-radius: 20px; font-size: 13px; font-weight: 600;
+    cursor: pointer; border: 1.5px solid var(--border);
+    background: white; color: var(--text-2);
+    transition: all .15s; white-space: nowrap;
+  }
+  .tab-pill.active {
+    background: var(--primary); color: white;
+    border-color: var(--primary);
+    box-shadow: 0 2px 8px rgba(37,99,235,.3);
+  }
+
+  /* ─── SCROLL AREA ─── */
+  .scroll-area { flex: 1; overflow-y: auto; padding: 14px 14px 24px; }
+
+  /* ─── SEARCH CARD ─── */
+  .search-card {
+    background: white; border-radius: var(--radius);
+    padding: 16px; margin-bottom: 12px;
+    box-shadow: var(--shadow);
+  }
+  .search-card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .search-card-header h2 { font-size: 14px; font-weight: 700; }
+  .toggle-search {
+    font-size: 12px; color: var(--primary); font-weight: 600;
+    cursor: pointer; background: none; border: none; padding: 0;
+  }
+  .search-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .search-field label { display: block; font-size: 11px; font-weight: 600; color: var(--text-2); margin-bottom: 5px; }
+  .search-field input {
+    width: 100%; padding: 9px 12px;
+    border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+    font-size: 13px; background: var(--surface-2);
+    transition: border-color .15s;
+  }
+  .search-field input:focus { outline: none; border-color: var(--primary); background: white; }
+  .price-range { display: flex; align-items: center; gap: 6px; }
+  .price-range input { flex: 1; }
+  .price-range span { font-size: 12px; color: var(--text-3); flex-shrink: 0; }
+  .search-field.full { grid-column: span 2; }
+  .search-actions { display: flex; gap: 8px; margin-top: 12px; }
+  .btn-primary {
+    flex: 1; padding: 11px; background: var(--primary); color: white;
+    border: none; border-radius: var(--radius-sm); font-size: 14px; font-weight: 700;
+    cursor: pointer; transition: background .15s;
+  }
+  .btn-primary:active { background: var(--primary-dark); }
+  .btn-ghost {
+    padding: 11px 18px; background: var(--surface-3); color: var(--text-2);
+    border: none; border-radius: var(--radius-sm); font-size: 14px; font-weight: 600;
+    cursor: pointer;
+  }
+
+  /* ─── STATUS BAR ─── */
+  .status-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px; padding: 0 2px;
+  }
+  .result-count { font-size: 13px; color: var(--text-2); }
+  .result-count strong { color: var(--primary); font-size: 16px; font-weight: 700; }
+  .status-right { display: flex; align-items: center; gap: 8px; }
+  .live-badge {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 11px; font-weight: 600; color: var(--success);
+    background: #d1fae5; padding: 4px 10px; border-radius: 20px;
+  }
+  .live-dot {
+    width: 6px; height: 6px; background: var(--success);
+    border-radius: 50%; animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .reload-btn {
+    padding: 6px 12px; background: white; border: 1.5px solid var(--border);
+    border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer;
+    color: var(--text-2); transition: all .15s;
+  }
+  .reload-btn:active { border-color: var(--primary); color: var(--primary); }
+
+  /* ─── CARD LIST ─── */
+  .card-list { display: flex; flex-direction: column; gap: 10px; }
+
+  .item-card {
+    background: white; border-radius: var(--radius);
+    padding: 16px; box-shadow: var(--shadow);
+    cursor: pointer; transition: transform .15s, box-shadow .15s;
+    border: 1.5px solid transparent;
+  }
+  .item-card:active { transform: scale(.985); box-shadow: none; border-color: var(--primary-light); }
+
+  .item-card-top {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .item-name { font-size: 16px; font-weight: 700; line-height: 1.3; }
+  .item-model { font-size: 13px; color: var(--text-2); margin-top: 2px; }
+  .item-price { font-size: 18px; font-weight: 800; color: var(--primary); white-space: nowrap; margin-left: 10px; }
+  .item-price span { font-size: 12px; font-weight: 600; }
+
+  .item-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 10px; border-radius: 20px;
+    font-size: 12px; font-weight: 600; background: var(--surface-3); color: var(--text-2);
+  }
+  .tag.color-tag { }
+  .tag.chassis { font-family: monospace; letter-spacing: .05em; }
+
+  /* ─── TABLE VIEW (desktop) ─── */
+  .table-card {
+    background: white; border-radius: var(--radius);
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 700px; }
+  th {
+    background: var(--surface-2); color: var(--text-2);
+    padding: 11px 14px; text-align: left;
+    font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+    white-space: nowrap; cursor: pointer; user-select: none;
+    border-bottom: 2px solid var(--border);
+    position: sticky; top: 0;
+  }
+  th:hover { color: var(--primary); }
+  td { padding: 12px 14px; border-bottom: 1px solid var(--surface-3); white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface-2); }
+
+  /* ─── STATES ─── */
+  .state-box {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; padding: 60px 20px; gap: 12px;
+  }
+  .state-icon { font-size: 48px; }
+  .state-title { font-size: 16px; font-weight: 700; color: var(--text-2); }
+  .state-sub { font-size: 13px; color: var(--text-3); text-align: center; }
+  .spinner {
+    width: 32px; height: 32px; border: 3px solid var(--border);
+    border-top-color: var(--primary); border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ─── COLOR BADGE ─── */
+  .price-cell { font-weight: 700; color: var(--primary); }
+  .color-badge {
+    display: inline-block; padding: 3px 10px;
+    border-radius: 20px; font-size: 12px; font-weight: 600;
+  }
+
+  /* ─── MODAL ─── */
+  .overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(15,23,42,.5); z-index: 200;
+    align-items: flex-end; justify-content: center;
+    backdrop-filter: blur(2px);
+  }
+  .overlay.open { display: flex; }
+  .sheet {
+    background: white; border-radius: 24px 24px 0 0;
+    padding: 0 0 32px; width: 100%; max-width: 540px;
+    max-height: 90vh; overflow-y: auto;
+    box-shadow: 0 -8px 40px rgba(0,0,0,.15);
+    animation: slideUp .25s ease;
+  }
+  @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } }
+  .sheet-handle {
+    width: 36px; height: 4px; background: var(--border);
+    border-radius: 2px; margin: 12px auto 20px;
+  }
+  .sheet-title {
+    font-size: 17px; font-weight: 700; padding: 0 20px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sheet-body { padding: 16px 20px; }
+
+  .account-row {
+    border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+    margin-bottom: 10px; overflow: hidden;
+  }
+  .account-row-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 14px; background: var(--surface-2);
+  }
+  .acct-name { font-weight: 700; font-size: 14px; }
+  .acct-role {
+    font-size: 11px; font-weight: 600; padding: 2px 8px;
+    border-radius: 20px; margin-top: 3px; display: inline-block;
+  }
+  .acct-role.admin { background: #fef3c7; color: #92400e; }
+  .acct-role.user  { background: var(--primary-light); color: var(--primary-dark); }
+  .sheet-perms { padding: 10px 14px; display: flex; gap: 12px; flex-wrap: wrap; border-top: 1px solid var(--surface-3); }
+  .sheet-perms label { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+  .sheet-perms input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--primary); }
+
+  .add-acct h3 { font-size: 14px; font-weight: 700; margin-bottom: 12px; }
+  .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .input-grid input, .input-grid select {
+    padding: 10px 12px; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+    font-size: 13px; width: 100%; background: var(--surface-2);
+  }
+  .input-grid input:focus, .input-grid select:focus { outline: none; border-color: var(--primary); }
+  .check-row { display: flex; gap: 14px; margin-bottom: 10px; flex-wrap: wrap; }
+  .check-row label { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+  .form-error { color: var(--danger); font-size: 13px; margin-bottom: 8px; min-height: 18px; }
+
+  .btn-add { padding: 11px 20px; background: var(--primary); color: white; border: none; border-radius: var(--radius-sm); font-size: 14px; font-weight: 700; cursor: pointer; }
+  .btn-close { padding: 11px 20px; background: var(--surface-3); color: var(--text-2); border: none; border-radius: var(--radius-sm); font-size: 14px; font-weight: 600; cursor: pointer; }
+  .btn-del { padding: 5px 12px; background: #fee2e2; color: var(--danger); border: none; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; }
+
+  /* ─── DETAIL SHEET ─── */
+  .detail-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px;
+  }
+  .detail-item label { font-size: 11px; font-weight: 600; color: var(--text-3); display: block; margin-bottom: 3px; }
+  .detail-item span { font-size: 15px; font-weight: 600; }
+  .detail-item.full { grid-column: span 2; }
+  .detail-price { font-size: 28px; font-weight: 800; color: var(--primary); margin-top: 16px; }
+  .detail-price small { font-size: 14px; }
+
+  /* ─── VIEW TOGGLE ─── */
+  .view-toggle {
+    display: flex; gap: 2px; background: var(--surface-3);
+    border-radius: 8px; padding: 2px;
+  }
+  .view-btn {
+    width: 30px; height: 28px; border: none; border-radius: 6px;
+    background: transparent; cursor: pointer; font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-3); transition: all .15s;
+  }
+  .view-btn.active { background: white; color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+
+  /* ─── RESPONSIVE ─── */
+  @media (min-width: 640px) {
+    .search-fields { grid-template-columns: repeat(3, 1fr); }
+    .scroll-area { padding: 20px 20px 32px; }
+    #cardView { display: none !important; }
+    #tableView { display: block !important; }
+    .view-toggle { display: none; }
+  }
+  @media (max-width: 639px) {
+    #tableView { display: none !important; }
+    #cardView { display: block !important; }
+    .view-toggle { display: flex; }
+    .show-table #tableView { display: block !important; }
+    .show-table #cardView { display: none !important; }
+  }
+
+  .divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+</style>
+</head>
+<body>
+
+<!-- ═══ LOGIN ═══ -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="icon">🚗</div>
+      <h1>在庫検索</h1>
+      <p>在庫管理システム</p>
+    </div>
+    <div class="field">
+      <label>ユーザー名</label>
+      <input type="text" id="loginUser" placeholder="ユーザー名を入力" autocomplete="username">
+    </div>
+    <div class="field">
+      <label>パスワード</label>
+      <input type="password" id="loginPass" placeholder="パスワードを入力" autocomplete="current-password">
+    </div>
+    <button class="btn-login" onclick="login()">ログイン</button>
+    <div class="login-error" id="loginError"></div>
+    <div id="defaultInfo" style="display:none">
+      <div class="login-hint">
+        <strong>初期アカウント</strong><br>
+        管理者：admin / admin123<br>
+        一般：user / user123
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ APP ═══ -->
+<div id="app">
+
+  <!-- Header -->
+  <div class="app-header">
+    <div class="header-title">
+      <h1>🚗 在庫検索</h1>
+      <p id="currentUserLabel"></p>
+    </div>
+    <div class="header-actions">
+      <div class="view-toggle" id="viewToggle">
+        <button class="view-btn active" id="btnCard" onclick="setView('card')" title="カード表示">▤</button>
+        <button class="view-btn" id="btnTable" onclick="setView('table')" title="テーブル表示">☰</button>
+      </div>
+      <button class="icon-btn" id="accountBtn" onclick="openAccounts()" style="display:none" title="アカウント管理">⚙</button>
+      <button class="icon-btn" onclick="logout()" title="ログアウト">↩</button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tab-bar" id="tabBar"></div>
+
+  <!-- Scroll area -->
+  <div class="scroll-area" id="scrollArea">
+
+    <!-- Search -->
+    <div class="search-card">
+      <div class="search-card-header">
+        <h2>🔍 絞り込み</h2>
+        <button class="toggle-search" id="searchToggleBtn" onclick="toggleSearch()">閉じる ▲</button>
+      </div>
+      <div id="searchBody">
+        <div class="search-fields">
+          <div class="search-field">
+            <label>メーカー・車名</label>
+            <input type="text" id="s_maker" placeholder="スズキ、ホンダ…">
+          </div>
+          <div class="search-field" id="modelCol">
+            <label>車種・モデル</label>
+            <input type="text" id="s_model" placeholder="N-BOX、タント…">
+          </div>
+          <div class="search-field">
+            <label>色</label>
+            <input type="text" id="s_color" placeholder="黒、白、赤…">
+          </div>
+          <div class="search-field">
+            <label>車台番号（下3桁）</label>
+            <input type="text" id="s_chassis" placeholder="471…">
+          </div>
+          <div class="search-field">
+            <label>年式</label>
+            <input type="text" id="s_year" placeholder="H29、R1…">
+          </div>
+          <div class="search-field">
+            <label>金額（万円）</label>
+            <div class="price-range">
+              <input type="number" id="s_priceMin" placeholder="最小">
+              <span>〜</span>
+              <input type="number" id="s_priceMax" placeholder="最大">
+            </div>
+          </div>
+        </div>
+        <div class="search-actions">
+          <button class="btn-primary" onclick="doSearch()">検索</button>
+          <button class="btn-ghost" onclick="resetSearch()">リセット</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status -->
+    <div class="status-bar">
+      <div class="result-count" id="countLabel">読み込み中…</div>
+      <div class="status-right">
+        <div class="live-badge"><div class="live-dot"></div>自動更新</div>
+        <button class="reload-btn" onclick="forceReload()">↻ 更新</button>
+      </div>
+    </div>
+
+    <!-- Card view (mobile) -->
+    <div id="cardView">
+      <div id="cardLoading" class="state-box">
+        <div class="spinner"></div>
+        <div class="state-title">データを取得中…</div>
+      </div>
+      <div id="cardNoData" class="state-box" style="display:none">
+        <div class="state-icon">🔍</div>
+        <div class="state-title">条件に一致するデータがありません</div>
+        <div class="state-sub">検索条件を変えてお試しください</div>
+      </div>
+      <div class="card-list" id="cardList" style="display:none"></div>
+    </div>
+
+    <!-- Table view (desktop / toggled) -->
+    <div id="tableView">
+      <div class="table-card">
+        <div id="tableLoading" class="state-box">
+          <div class="spinner"></div>
+          <div class="state-title">データを取得中…</div>
+        </div>
+        <div id="tableNoData" class="state-box" style="display:none">
+          <div class="state-icon">🔍</div>
+          <div class="state-title">条件に一致するデータがありません</div>
+        </div>
+        <div class="table-wrap" id="tableWrap" style="display:none">
+          <table>
+            <thead id="tableHead"></thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /scroll-area -->
+</div><!-- /app -->
+
+<!-- ═══ DETAIL SHEET ═══ -->
+<div class="overlay" id="detailOverlay" onclick="closeDetail(event)">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="detailTitle">詳細</div>
+    <div class="sheet-body" id="detailBody"></div>
+  </div>
+</div>
+
+<!-- ═══ ACCOUNT SHEET ═══ -->
+<div class="overlay" id="accountOverlay" onclick="closeAccounts(event)">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">⚙ アカウント管理</div>
+    <div class="sheet-body">
+      <div id="accountList"></div>
+      <hr class="divider">
+      <div class="add-acct">
+        <h3>新規アカウント追加</h3>
+        <div class="input-grid">
+          <input type="text" id="newUser" placeholder="ユーザー名">
+          <input type="password" id="newPass" placeholder="パスワード">
+        </div>
+        <div class="input-grid">
+          <select id="newRole">
+            <option value="user">一般ユーザー</option>
+            <option value="admin">管理者</option>
+          </select>
+          <div></div>
+        </div>
+        <div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:8px">アクセス可能なシート</div>
+        <div class="check-row">
+          <label><input type="checkbox" id="new_kei" checked> 軽自動車</label>
+          <label><input type="checkbox" id="new_futsuu" checked> 普通車</label>
+          <label><input type="checkbox" id="new_misshiyou" checked> 未使用車</label>
+        </div>
+        <div class="form-error" id="addAccountError"></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-add" onclick="addAccount()">追加</button>
+          <button class="btn-close" onclick="closeAccounts()">閉じる</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxpyMAUhxZtOYwFkH2OnNjaGstgM5zi6o9Y1npYcrncrXCOhrEsOuljSzA_sk2jf1g/exec';
+const ALL_SHEETS = {
+  kei:       { name: '在庫シート', label: '軽自動車', emoji: '🚗', hasModel: true },
+  futsuu:    { name: '普通車',     label: '普通車',   emoji: '🚙', hasModel: true },
+  misshiyou: { name: '未使用車',   label: '未使用車', emoji: '✨', hasModel: true }
+};
+const ALL_SHEET_KEYS = ['kei', 'futsuu', 'misshiyou'];
+const COL = { no:0, maker:1, model:2, year:3, color:4, chassis:5, displacement:6, inspection:7, mileage:8, price:12 };
+
+let currentTab = null, dataCache = {}, allData = [], filteredData = [];
+let sortCol = -1, sortAsc = true, currentUser = null, autoRefreshTimer = null;
+let searchVisible = true, currentView = 'card';
+
+// ── ACCOUNTS ──
+function getAccounts() {
+  const s = localStorage.getItem('zaikoAccounts');
+  if (s) return JSON.parse(s);
+  const d = [
+    { username:'admin', password:'admin123', role:'admin', sheets:ALL_SHEET_KEYS },
+    { username:'user',  password:'user123',  role:'user',  sheets:['kei'] }
+  ];
+  localStorage.setItem('zaikoAccounts', JSON.stringify(d));
+  return d;
+}
+function saveAccounts(a) { localStorage.setItem('zaikoAccounts', JSON.stringify(a)); }
+
+// ── AUTH ──
+function login() {
+  const user = document.getElementById('loginUser').value.trim();
+  const pass = document.getElementById('loginPass').value;
+  const found = getAccounts().find(a => a.username === user && a.password === pass);
+  if (found) {
+    currentUser = found;
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('app').classList.add('visible');
+    document.getElementById('currentUserLabel').textContent = found.username;
+    if (found.role === 'admin') document.getElementById('accountBtn').style.display = 'flex';
+    buildTabs();
+    startAutoRefresh();
+  } else {
+    document.getElementById('loginError').textContent = 'ユーザー名またはパスワードが間違っています';
+    document.getElementById('defaultInfo').style.display = 'block';
+  }
+}
+function logout() {
+  stopAutoRefresh();
+  currentUser = null; dataCache = {};
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('app').classList.remove('visible');
+  document.getElementById('loginUser').value = '';
+  document.getElementById('loginPass').value = '';
+  document.getElementById('loginError').textContent = '';
+  document.getElementById('accountBtn').style.display = 'none';
+  document.getElementById('tabBar').innerHTML = '';
+}
+document.getElementById('loginPass').addEventListener('keydown', e => { if(e.key==='Enter') login(); });
+document.getElementById('loginUser').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('loginPass').focus(); });
+
+// ── TABS ──
+function buildTabs() {
+  const allowed = currentUser.sheets || ALL_SHEET_KEYS;
+  const bar = document.getElementById('tabBar');
+  bar.innerHTML = '';
+  allowed.forEach((key, i) => {
+    const d = document.createElement('button');
+    d.className = 'tab-pill' + (i===0?' active':'');
+    d.id = 'tab-' + key;
+    d.textContent = ALL_SHEETS[key].emoji + ' ' + ALL_SHEETS[key].label;
+    d.onclick = () => switchTab(key);
+    bar.appendChild(d);
+  });
+  switchTab(allowed[0]);
+}
+function switchTab(tab) {
+  if (!currentUser.sheets.includes(tab)) return;
+  currentTab = tab;
+  document.querySelectorAll('.tab-pill').forEach(t => t.classList.remove('active'));
+  const el = document.getElementById('tab-' + tab);
+  if (el) el.classList.add('active');
+  document.getElementById('modelCol').style.display = ALL_SHEETS[tab].hasModel ? '' : 'none';
+  resetSearchInputs();
+  if (dataCache[tab]) {
+    allData = dataCache[tab];
+    filteredData = [...allData];
+    renderAll(filteredData);
+    document.getElementById('countLabel').innerHTML = `全 <strong>${allData.length}</strong> 件`;
+  } else {
+    loadSheet(tab);
+  }
+}
+
+// ── AUTO REFRESH ──
+function startAutoRefresh() {
+  stopAutoRefresh();
+  autoRefreshTimer = setInterval(() => {
+    if (currentTab) { dataCache[currentTab] = null; loadSheet(currentTab, true); }
+  }, 60000);
+}
+function stopAutoRefresh() { if(autoRefreshTimer){ clearInterval(autoRefreshTimer); autoRefreshTimer=null; } }
+function forceReload() { if(currentTab){ dataCache[currentTab]=null; loadSheet(currentTab); } }
+
+// ── LOAD ──
+async function loadSheet(tabKey, silent=false) {
+  if (!silent) {
+    showLoading(true);
+    document.getElementById('countLabel').textContent = '読み込み中…';
+  }
+  const url = `${GAS_URL}?sheet=${encodeURIComponent(ALL_SHEETS[tabKey].name)}`;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 20000);
+    const res = await fetch(url, { signal: ctrl.signal, redirect:'follow' });
+    clearTimeout(t);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (data && data.error) throw new Error(data.error);
+    const parsed = (Array.isArray(data) ? data : [])
+      .map(r => r.map(c => (c!==null&&c!==undefined) ? String(c) : ''))
+      .filter(r => r[0] && !isNaN(parseInt(r[0])));
+    dataCache[tabKey] = parsed;
+    if (tabKey === currentTab) {
+      allData = parsed;
+      filteredData = [...allData];
+      renderAll(filteredData);
+      document.getElementById('countLabel').innerHTML = `全 <strong>${allData.length}</strong> 件`;
+    }
+  } catch(e) {
+    if (tabKey !== currentTab || silent) return;
+    showLoading(false, e.name==='AbortError'
+      ? 'タイムアウト。「↻ 更新」をお試しください。'
+      : `読み込み失敗: ${e.message}`);
+  }
+}
+function showLoading(on, msg='') {
+  const states = ['cardLoading','cardNoData','cardList','tableLoading','tableNoData','tableWrap'];
+  states.forEach(id => document.getElementById(id).style.display = 'none');
+  if (on) {
+    document.getElementById('cardLoading').style.display = 'flex';
+    document.getElementById('tableLoading').style.display = 'flex';
+  } else if (msg) {
+    document.getElementById('cardLoading').querySelector('.state-title').textContent = msg;
+    document.getElementById('cardLoading').style.display = 'flex';
+    document.getElementById('tableLoading').querySelector('.state-title').textContent = msg;
+    document.getElementById('tableLoading').style.display = 'flex';
+  }
+}
+
+// ── SEARCH ──
+function toggleSearch() {
+  searchVisible = !searchVisible;
+  document.getElementById('searchBody').style.display = searchVisible ? '' : 'none';
+  document.getElementById('searchToggleBtn').textContent = searchVisible ? '閉じる ▲' : '開く ▼';
+}
+function doSearch() {
+  const maker   = document.getElementById('s_maker').value.trim().toLowerCase();
+  const model   = document.getElementById('s_model').value.trim().toLowerCase();
+  const color   = document.getElementById('s_color').value.trim().toLowerCase();
+  const chassis = document.getElementById('s_chassis').value.trim();
+  const year    = document.getElementById('s_year').value.trim().toLowerCase();
+  const pMin    = parseFloat(document.getElementById('s_priceMin').value)||0;
+  const pMax    = parseFloat(document.getElementById('s_priceMax').value)||Infinity;
+  filteredData = allData.filter(r => {
+    if (maker   && !(r[COL.maker]||'').toLowerCase().includes(maker))   return false;
+    if (model   && !(r[COL.model]||'').toLowerCase().includes(model))   return false;
+    if (color   && !(r[COL.color]||'').toLowerCase().includes(color))   return false;
+    if (chassis && !(r[COL.chassis]||'').includes(chassis))             return false;
+    if (year    && !(r[COL.year]||'').toLowerCase().includes(year))     return false;
+    const p = parsePrice(r[COL.price]) / 10000;
+    if (pMin>0 && p<pMin) return false;
+    if (pMax<Infinity && p>pMax) return false;
+    return true;
+  });
+  renderAll(filteredData);
+  document.getElementById('countLabel').innerHTML =
+    `<strong>${filteredData.length}</strong> 件 / 全${allData.length}件`;
+}
+function resetSearch() {
+  resetSearchInputs();
+  filteredData = [...allData];
+  if (allData.length > 0) {
+    renderAll(filteredData);
+    document.getElementById('countLabel').innerHTML = `全 <strong>${allData.length}</strong> 件`;
+  }
+}
+function resetSearchInputs() {
+  ['s_maker','s_model','s_color','s_chassis','s_year','s_priceMin','s_priceMax']
+    .forEach(id => { document.getElementById(id).value=''; });
+}
+function parsePrice(s) { return s ? parseInt(s.replace(/[¥￥,\s円]/g,''))||0 : 0; }
+
+// ── SORT ──
+function sortBy(col) {
+  if(sortCol===col) sortAsc=!sortAsc; else { sortCol=col; sortAsc=true; }
+  filteredData.sort((a,b) => {
+    const av=a[col]||'', bv=b[col]||'';
+    const an=parseFloat(av.replace(/[¥,]/g,'')), bn=parseFloat(bv.replace(/[¥,]/g,''));
+    const cmp = (!isNaN(an)&&!isNaN(bn)) ? an-bn : av.localeCompare(bv,'ja');
+    return sortAsc ? cmp : -cmp;
+  });
+  renderAll(filteredData);
+}
+
+// ── COLOR MAP ──
+const COLOR_MAP = {
+  '黒':'#334155','白':'#2563eb','P白':'#2563eb','銀':'#64748b','赤':'#ef4444',
+  '青':'#2563eb','紺':'#1e3a5f','緑':'#10b981','黄':'#f59e0b','茶':'#92400e',
+  '金':'#b45309','桃':'#db2777','水':'#0891b2','紫':'#7c3aed','灰':'#475569',
+  '橙':'#ea580c','肌':'#c2935a',
+};
+
+// ── RENDER (both views) ──
+function renderAll(data) {
+  renderCards(data);
+  renderTable(data);
+}
+
+function renderCards(data) {
+  document.getElementById('cardLoading').style.display = 'none';
+  if (data.length === 0) {
+    document.getElementById('cardNoData').style.display = 'flex';
+    document.getElementById('cardList').style.display = 'none';
+    return;
+  }
+  document.getElementById('cardNoData').style.display = 'none';
+  document.getElementById('cardList').style.display = 'flex';
+  const hasModel = ALL_SHEETS[currentTab].hasModel;
+  document.getElementById('cardList').innerHTML = data.map((r,i) => {
+    const color = r[COL.color]||'';
+    const fg = COLOR_MAP[color]||'var(--primary)';
+    const price = r[COL.price] ? `${Math.round(parsePrice(r[COL.price])/10000)}万円` : '-';
+    return `<div class="item-card" onclick="showDetail(${i})">
+      <div class="item-card-top">
+        <div>
+          <div class="item-name">${escHtml(r[COL.maker]||'-')}</div>
+          ${hasModel ? `<div class="item-model">${escHtml(r[COL.model]||'')}</div>` : ''}
+        </div>
+        <div class="item-price">${price}</div>
+      </div>
+      <div class="item-tags">
+        ${color ? `<span class="tag color-tag" style="background:${fg}22;color:${fg}">${escHtml(color)}</span>` : ''}
+        ${r[COL.year] ? `<span class="tag">📅 ${escHtml(r[COL.year])}</span>` : ''}
+        ${r[COL.mileage] ? `<span class="tag">🛣 ${escHtml(r[COL.mileage])}</span>` : ''}
+        ${r[COL.chassis] ? `<span class="tag chassis">車台 …${escHtml(r[COL.chassis])}</span>` : ''}
+        ${r[COL.inspection] ? `<span class="tag">🔖 ${escHtml(r[COL.inspection])}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderTable(data) {
+  document.getElementById('tableLoading').style.display = 'none';
+  const hasModel = ALL_SHEETS[currentTab].hasModel;
+  const headers    = hasModel
+    ? ['No','車名','車種','年式','色','車台','排気量','車検','走行距離','金額']
+    : ['No','車名','年式','色','車台','排気量','車検','走行距離','金額'];
+  const cols = hasModel ? [COL.no,COL.maker,COL.model,COL.year,COL.color,COL.chassis,COL.displacement,COL.inspection,COL.mileage,COL.price]
+                        : [COL.no,COL.maker,COL.year,COL.color,COL.chassis,COL.displacement,COL.inspection,COL.mileage,COL.price];
+  document.getElementById('tableHead').innerHTML = '<tr>' +
+    headers.map((h,i) => `<th onclick="sortBy(${cols[i]})">${h} <span style="opacity:.4;font-size:10px">${sortCol===cols[i]?(sortAsc?'▲':'▼'):'↕'}</span></th>`).join('') + '</tr>';
+
+  if (data.length === 0) {
+    document.getElementById('tableNoData').style.display = 'flex';
+    document.getElementById('tableWrap').style.display = 'none';
+    return;
+  }
+  document.getElementById('tableNoData').style.display = 'none';
+  document.getElementById('tableWrap').style.display = 'block';
+  document.getElementById('tableBody').innerHTML = data.map((r,i) => {
+    const color = r[COL.color]||'';
+    const fg = COLOR_MAP[color]||'var(--primary)';
+    const badge = color ? `<span class="color-badge" style="background:${fg}22;color:${fg}">${escHtml(color)}</span>` : '-';
+    const price = r[COL.price] ? `<span class="price-cell">${escHtml(r[COL.price])}</span>` : '-';
+    const cells = hasModel
+      ? [r[COL.no],r[COL.maker],r[COL.model],r[COL.year],badge,r[COL.chassis],r[COL.displacement],r[COL.inspection],r[COL.mileage],price]
+      : [r[COL.no],r[COL.maker],r[COL.year],badge,r[COL.chassis],r[COL.displacement],r[COL.inspection],r[COL.mileage],price];
+    return `<tr onclick="showDetail(${i})" style="cursor:pointer">` + cells.map(c => `<td>${c||'-'}</td>`).join('') + '</tr>';
+  }).join('');
+}
+
+// ── DETAIL ──
+function showDetail(idx) {
+  const r = filteredData[idx];
+  if (!r) return;
+  const hasModel = ALL_SHEETS[currentTab].hasModel;
+  const price = r[COL.price] ? Math.round(parsePrice(r[COL.price])/10000) + '万円' : '-';
+  const color = r[COL.color]||'';
+  const fg = COLOR_MAP[color]||'var(--primary)';
+  document.getElementById('detailTitle').textContent = (r[COL.maker]||'') + (hasModel&&r[COL.model] ? ' ' + r[COL.model] : '');
+  document.getElementById('detailBody').innerHTML = `
+    <div class="detail-price">¥ ${price}</div>
+    <div class="detail-grid">
+      <div class="detail-item"><label>メーカー</label><span>${escHtml(r[COL.maker]||'-')}</span></div>
+      ${hasModel ? `<div class="detail-item"><label>車種</label><span>${escHtml(r[COL.model]||'-')}</span></div>` : ''}
+      <div class="detail-item"><label>年式</label><span>${escHtml(r[COL.year]||'-')}</span></div>
+      <div class="detail-item"><label>色</label><span><span class="color-badge" style="background:${fg}22;color:${fg}">${escHtml(color||'-')}</span></span></div>
+      <div class="detail-item"><label>車台番号</label><span style="font-family:monospace">${escHtml(r[COL.chassis]||'-')}</span></div>
+      <div class="detail-item"><label>排気量</label><span>${escHtml(r[COL.displacement]||'-')}</span></div>
+      <div class="detail-item"><label>車検</label><span>${escHtml(r[COL.inspection]||'-')}</span></div>
+      <div class="detail-item"><label>走行距離</label><span>${escHtml(r[COL.mileage]||'-')}</span></div>
+      <div class="detail-item"><label>管理No.</label><span>${escHtml(r[COL.no]||'-')}</span></div>
+    </div>`;
+  document.getElementById('detailOverlay').classList.add('open');
+}
+function closeDetail(e) {
+  if (!e || e.target === document.getElementById('detailOverlay')) {
+    document.getElementById('detailOverlay').classList.remove('open');
+  }
+}
+
+// ── VIEW TOGGLE ──
+function setView(v) {
+  currentView = v;
+  document.getElementById('btnCard').classList.toggle('active', v==='card');
+  document.getElementById('btnTable').classList.toggle('active', v==='table');
+  const area = document.getElementById('scrollArea');
+  if (v==='table') area.classList.add('show-table');
+  else area.classList.remove('show-table');
+}
+
+// ── ACCOUNTS ──
+function openAccounts() { renderAccountList(); document.getElementById('accountOverlay').classList.add('open'); }
+function closeAccounts(e) {
+  if (!e || e.target === document.getElementById('accountOverlay')) {
+    document.getElementById('accountOverlay').classList.remove('open');
+  }
+}
+function renderAccountList() {
+  const accounts = getAccounts();
+  document.getElementById('accountList').innerHTML = accounts.map((a,i) => {
+    const isSelf = a.username === currentUser.username;
+    const sheets = a.sheets || ALL_SHEET_KEYS;
+    const boxes = ALL_SHEET_KEYS.map(k =>
+      `<label><input type="checkbox" ${sheets.includes(k)?'checked':''} onchange="toggleSheet(${i},'${k}',this.checked)"
+        ${isSelf||a.role==='admin'?'disabled':''}> ${ALL_SHEETS[k].emoji} ${ALL_SHEETS[k].label}</label>`
+    ).join('');
+    return `<div class="account-row">
+      <div class="account-row-header">
+        <div>
+          <div class="acct-name">${escHtml(a.username)} ${isSelf?'<span style="font-size:11px;color:var(--text-3)">（自分）</span>':''}</div>
+          <span class="acct-role ${a.role}">${a.role==='admin'?'管理者':'一般ユーザー'}</span>
+        </div>
+        ${!isSelf?`<button class="btn-del" onclick="deleteAccount(${i})">削除</button>`:''}
+      </div>
+      <div class="sheet-perms">
+        <span style="font-size:11px;color:var(--text-3);font-weight:600;align-self:center">アクセス：</span>
+        ${a.role==='admin'?'<span style="font-size:12px;color:var(--success);font-weight:600">全シート</span>':boxes}
+      </div>
+    </div>`;
+  }).join('');
+}
+function toggleSheet(idx, key, checked) {
+  const accounts = getAccounts();
+  const a = accounts[idx];
+  if (!a.sheets) a.sheets = [...ALL_SHEET_KEYS];
+  if (checked) { if(!a.sheets.includes(key)) a.sheets.push(key); }
+  else { a.sheets = a.sheets.filter(s => s!==key); }
+  saveAccounts(accounts);
+}
+function addAccount() {
+  const user = document.getElementById('newUser').value.trim();
+  const pass = document.getElementById('newPass').value;
+  const role = document.getElementById('newRole').value;
+  const err  = document.getElementById('addAccountError');
+  if (!user||!pass) { err.textContent='ユーザー名とパスワードを入力してください'; return; }
+  const accounts = getAccounts();
+  if (accounts.find(a => a.username===user)) { err.textContent='そのユーザー名はすでに使われています'; return; }
+  const sheets = ALL_SHEET_KEYS.filter(k => document.getElementById('new_'+k).checked);
+  if (sheets.length===0) { err.textContent='最低1つのシートを選択してください'; return; }
+  accounts.push({ username:user, password:pass, role, sheets: role==='admin'?ALL_SHEET_KEYS:sheets });
+  saveAccounts(accounts);
+  document.getElementById('newUser').value = '';
+  document.getElementById('newPass').value = '';
+  err.textContent = '';
+  renderAccountList();
+}
+function deleteAccount(i) {
+  if (!confirm('このアカウントを削除しますか？')) return;
+  const accounts = getAccounts();
+  accounts.splice(i, 1);
+  saveAccounts(accounts);
+  renderAccountList();
+}
+
+// ── UTILITY ──
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── SERVICE WORKER ──
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
