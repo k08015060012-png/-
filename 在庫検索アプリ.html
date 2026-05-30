@@ -777,6 +777,11 @@ function resetSearchInputs() {
     .forEach(id => { document.getElementById(id).value=''; });
 }
 function parsePrice(s) { return s ? parseInt(s.replace(/[¥￥,\s円]/g,''))||0 : 0; }
+function formatPrice(s) {
+  const n = parsePrice(s);
+  if (!n) return '-';
+  return '¥' + n.toLocaleString('ja-JP');
+}
 
 // ── SORT ──
 function sortBy(col) {
@@ -817,7 +822,7 @@ function renderCards(data) {
   document.getElementById('cardList').innerHTML = data.map((r,i) => {
     const color = r[COL.color]||'';
     const fg = COLOR_MAP[color]||'var(--primary)';
-    const price = r[COL.price] ? `${Math.round(parsePrice(r[COL.price])/10000)}万円` : '-';
+    const price = formatPrice(r[COL.price]);
     return `<div class="item-card" onclick="showDetail(${i})">
       <div class="item-card-top">
         <div>
@@ -859,7 +864,7 @@ function renderTable(data) {
     const color = r[COL.color]||'';
     const fg = COLOR_MAP[color]||'var(--primary)';
     const badge = color ? `<span class="color-badge" style="background:${fg}22;color:${fg}">${escHtml(color)}</span>` : '-';
-    const price = r[COL.price] ? `<span class="price-cell">${escHtml(r[COL.price])}</span>` : '-';
+    const price = r[COL.price] ? `<span class="price-cell">${escHtml(formatPrice(r[COL.price]))}</span>` : '-';
     const cells = hasModel
       ? [r[COL.no],r[COL.maker],r[COL.model],r[COL.year],badge,r[COL.chassis],r[COL.displacement],r[COL.inspection],r[COL.mileage],price]
       : [r[COL.no],r[COL.maker],r[COL.year],badge,r[COL.chassis],r[COL.displacement],r[COL.inspection],r[COL.mileage],price];
@@ -872,12 +877,12 @@ function showDetail(idx) {
   const r = filteredData[idx];
   if (!r) return;
   const hasModel = ALL_SHEETS[currentTab].hasModel;
-  const price = r[COL.price] ? Math.round(parsePrice(r[COL.price])/10000) + '万円' : '-';
+  const price = formatPrice(r[COL.price]);
   const color = r[COL.color]||'';
   const fg = COLOR_MAP[color]||'var(--primary)';
   document.getElementById('detailTitle').textContent = (r[COL.maker]||'') + (hasModel&&r[COL.model] ? ' ' + r[COL.model] : '');
   document.getElementById('detailBody').innerHTML = `
-    <div class="detail-price">¥ ${price}</div>
+    <div class="detail-price">${escHtml(price)}</div>
     <div class="detail-grid">
       <div class="detail-item"><label>メーカー</label><span>${escHtml(r[COL.maker]||'-')}</span></div>
       ${hasModel ? `<div class="detail-item"><label>車種</label><span>${escHtml(r[COL.model]||'-')}</span></div>` : ''}
