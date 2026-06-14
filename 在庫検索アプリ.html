@@ -588,7 +588,7 @@
 </div>
 
 <script>
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbxpyMAUhxZtOYwFkH2OnNjaGstgM5zi6o9Y1npYcrncrXCOhrEsOuljSzA_sk2jf1g/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbz24XDwpBuIGWY8Ykpe5a1NouyvrWj4dRfD4eRfP0b5RMhE--ulKYhWMfTSZd6zH-Uj/exec';
 const ALL_SHEETS = {
   kei:       { name: '在庫シート', label: '軽自動車', emoji: '🚗', hasModel: true },
   futsuu:    { name: '普通車',     label: '普通車',   emoji: '🚙', hasModel: true },
@@ -811,6 +811,13 @@ function formatPrice(s) {
   if (!n) return '-';
   return '¥' + n.toLocaleString('ja-JP');
 }
+// 板金など、数値なら¥表記・それ以外（文字や空）はそのまま
+function formatYen(v) {
+  if (v === '' || v === null || v === undefined) return '';
+  const num = String(v).replace(/[¥￥,\s円]/g,'');
+  if (/^\d+$/.test(num)) return '¥' + parseInt(num).toLocaleString('ja-JP');
+  return String(v);
+}
 
 // ── SORT ──
 function sortBy(col) {
@@ -896,7 +903,7 @@ function renderTable(data) {
     const fg = COLOR_MAP[color]||'var(--primary)';
     const badge = color ? `<span class="color-badge" style="background:${fg}22;color:${fg}">${escHtml(color)}</span>` : '-';
     const price = r[COL.price] ? `<span class="price-cell">${escHtml(formatPrice(r[COL.price]))}</span>` : '-';
-    const extra = [r[COL.hp],r[COL.carsensor],r[COL.goonet],r[COL.bankin],r[COL.status]].map(v => escHtml(v||''));
+    const extra = [escHtml(r[COL.hp]||''),escHtml(r[COL.carsensor]||''),escHtml(r[COL.goonet]||''),escHtml(formatYen(r[COL.bankin])),escHtml(r[COL.status]||'')];
     const cells = (hasModel
       ? [r[COL.no],r[COL.maker],r[COL.model],r[COL.year],badge,r[COL.chassis],r[COL.displacement],r[COL.inspection],r[COL.mileage],price]
       : [r[COL.no],r[COL.maker],r[COL.year],badge,r[COL.chassis],r[COL.displacement],r[COL.inspection],r[COL.mileage],price]).concat(extra);
@@ -928,7 +935,7 @@ function showDetail(idx) {
       <div class="detail-item"><label>HP</label><span>${escHtml(r[COL.hp]||'-')}</span></div>
       <div class="detail-item"><label>カーセンサー</label><span>${escHtml(r[COL.carsensor]||'-')}</span></div>
       <div class="detail-item"><label>グーネット</label><span>${escHtml(r[COL.goonet]||'-')}</span></div>
-      <div class="detail-item"><label>板金</label><span>${escHtml(r[COL.bankin]||'-')}</span></div>
+      <div class="detail-item"><label>板金</label><span>${escHtml(formatYen(r[COL.bankin])||'-')}</span></div>
       <div class="detail-item"><label>状態</label><span>${escHtml(r[COL.status]||'-')}</span></div>
     </div>`;
   document.getElementById('detailOverlay').classList.add('open');
