@@ -615,18 +615,42 @@ function getAccounts() {
 function saveAccounts(a) { localStorage.setItem('zaikoAccounts', JSON.stringify(a)); }
 
 // ── AUTH ──
+const SESSION_DURATION = 30 * 60 * 1000; // 30分
+
+function saveSession(username) {
+  localStorage.setItem('zaikoSession', JSON.stringify({ username, expires: Date.now() + SESSION_DURATION }));
+}
+function clearSession() { localStorage.removeItem('zaikoSession'); }
+function restoreSession() {
+  const s = localStorage.getItem('zaikoSession');
+  if (!s) return false;
+  try {
+    const { username, expires } = JSON.parse(s);
+    if (Date.now() > expires) { clearSession(); return false; }
+    const found = getAccounts().find(a => a.username === username);
+    if (!found) { clearSession(); return false; }
+    enterApp(found);
+    return true;
+  } catch(e) { clearSession(); return false; }
+}
+
+function enterApp(found) {
+  currentUser = found;
+  saveSession(found.username);
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').classList.add('visible');
+  document.getElementById('currentUserLabel').textContent = found.username;
+  document.getElementById('accountBtn').style.display = found.role === 'admin' ? 'flex' : 'none';
+  buildTabs();
+  startAutoRefresh();
+}
+
 function login() {
   const user = document.getElementById('loginUser').value.trim();
   const pass = document.getElementById('loginPass').value;
   const found = getAccounts().find(a => a.username === user && a.password === pass);
   if (found) {
-    currentUser = found;
-    document.getElementById('loginScreen').style.display = 'none';
-    document.getElementById('app').classList.add('visible');
-    document.getElementById('currentUserLabel').textContent = found.username;
-    if (found.role === 'admin') document.getElementById('accountBtn').style.display = 'flex';
-    buildTabs();
-    startAutoRefresh();
+    enterApp(found);
   } else {
     document.getElementById('loginError').textContent = 'ユーザー名またはパスワードが間違っています';
     document.getElementById('defaultInfo').style.display = 'block';
@@ -634,6 +658,7 @@ function login() {
 }
 function logout() {
   stopAutoRefresh();
+  clearSession();
   currentUser = null; dataCache = {};
   document.getElementById('loginScreen').style.display = 'flex';
   document.getElementById('app').classList.remove('visible');
@@ -645,6 +670,9 @@ function logout() {
 }
 document.getElementById('loginPass').addEventListener('keydown', e => { if(e.key==='Enter') login(); });
 document.getElementById('loginUser').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('loginPass').focus(); });
+
+// ページ読み込み時に有効なセッションがあれば自動ログイン
+restoreSession();
 
 // ── TABS ──
 function buildTabs() {
