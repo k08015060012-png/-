@@ -469,8 +469,10 @@
       <div id="searchBody">
         <div class="search-fields">
           <div class="search-field">
-            <label>メーカー・車名</label>
-            <input type="text" id="s_maker" placeholder="スズキ、ホンダ…">
+            <label>メーカー</label>
+            <select id="s_maker">
+              <option value="">すべてのメーカー</option>
+            </select>
           </div>
           <div class="search-field" id="modelCol">
             <label>車種・モデル</label>
@@ -734,6 +736,7 @@ function switchTab(tab) {
   if (dataCache[tab]) {
     allData = dataCache[tab];
     filteredData = [...allData];
+    populateMakers();
     renderAll(filteredData);
     document.getElementById('countLabel').innerHTML = `全 <strong>${allData.length}</strong> 件`;
   } else {
@@ -768,11 +771,12 @@ async function loadSheet(tabKey, silent=false) {
     if (data && data.error) throw new Error(data.error);
     const parsed = (Array.isArray(data) ? data : [])
       .map(r => r.map(c => (c!==null&&c!==undefined) ? String(c) : ''))
-      .filter(r => r[0] && !isNaN(parseInt(r[0])));
+      .filter(r => /^\d+$/.test(String(r[0]).trim()) && parseInt(r[0]) > 0); // No列が正の整数の行のみ（集計行を除外）
     dataCache[tabKey] = parsed;
     if (tabKey === currentTab) {
       allData = parsed;
       filteredData = [...allData];
+      populateMakers();
       renderAll(filteredData);
       document.getElementById('countLabel').innerHTML = `全 <strong>${allData.length}</strong> 件`;
     }
@@ -795,6 +799,22 @@ function showLoading(on, msg='') {
     document.getElementById('tableLoading').querySelector('.state-title').textContent = msg;
     document.getElementById('tableLoading').style.display = 'flex';
   }
+}
+
+// ── メーカープルダウン（実データから生成）──
+const MAKER_ORDER = ['ホンダ','ダイハツ','スズキ','日産','スバル','トヨタ','マツダ','三菱','ミツビシ','ニッサン'];
+function populateMakers() {
+  const sel = document.getElementById('s_maker');
+  if (!sel || sel.tagName !== 'SELECT') return;
+  const cur = sel.value;
+  const present = [...new Set(allData.map(r => (r[COL.maker]||'').trim()).filter(Boolean))];
+  present.sort((a,b) => {
+    const ia = MAKER_ORDER.indexOf(a), ib = MAKER_ORDER.indexOf(b);
+    return (ia<0?99:ia) - (ib<0?99:ib) || a.localeCompare(b,'ja');
+  });
+  sel.innerHTML = '<option value="">すべてのメーカー</option>' +
+    present.map(m => `<option value="${escHtml(m)}">${escHtml(m)}</option>`).join('');
+  if (present.includes(cur)) sel.value = cur;
 }
 
 // ── SEARCH ──
