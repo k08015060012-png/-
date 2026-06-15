@@ -782,6 +782,7 @@ async function loadSheet(tabKey, silent=false) {
       allData = parsed;
       filteredData = [...allData];
       populateMakers();
+      populateYears();
       renderAll(filteredData);
       document.getElementById('countLabel').innerHTML = `全 <strong>${allData.length}</strong> 件`;
     }
