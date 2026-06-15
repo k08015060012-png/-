@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>在庫検索</title>
 
+<!-- QRコード生成ライブラリ（端末内で生成。認証情報は外部に送信されません） -->
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+
 <!-- PWA -->
 <link rel="manifest" href="./manifest.json">
 <meta name="mobile-web-app-capable" content="yes">
@@ -362,6 +365,7 @@
   .btn-add { padding: 11px 20px; background: var(--primary); color: white; border: none; border-radius: var(--radius-sm); font-size: 14px; font-weight: 700; cursor: pointer; }
   .btn-close { padding: 11px 20px; background: var(--surface-3); color: var(--text-2); border: none; border-radius: var(--radius-sm); font-size: 14px; font-weight: 600; cursor: pointer; }
   .btn-del { padding: 5px 12px; background: #fee2e2; color: var(--danger); border: none; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .btn-qr { padding: 5px 12px; background: var(--primary-light); color: var(--primary-dark); border: none; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; }
 
   /* ─── DETAIL SHEET ─── */
   .detail-grid {
@@ -626,6 +630,25 @@
   </div>
 </div>
 
+<!-- ═══ QRログイン発行モーダル ═══ -->
+<div class="overlay" id="qrOverlay" onclick="closeQR(event)">
+  <div class="sheet" style="max-width:380px;text-align:center">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" style="text-align:center" id="qrTitle">📲 ログインQR</div>
+    <div class="sheet-body">
+      <p style="font-size:13px;color:var(--text-2);margin-bottom:14px">
+        この端末で読み取ると <strong id="qrUserName"></strong> としてログインできます。<br>
+        <span style="color:var(--danger);font-weight:600">有効期限：<span id="qrCountdown">60</span> 秒</span>
+      </p>
+      <div id="qrCanvas" style="display:flex;justify-content:center;margin:0 auto 14px;min-height:240px;align-items:center"></div>
+      <p style="font-size:11px;color:var(--text-3);margin-bottom:14px">
+        ※ スマホ/タブレットのカメラで読み取ってください。期限切れの場合は再発行してください。
+      </p>
+      <button class="btn-close" style="width:100%" onclick="closeQR()">閉じる</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbz24XDwpBuIGWY8Ykpe5a1NouyvrWj4dRfD4eRfP0b5RMhE--ulKYhWMfTSZd6zH-Uj/exec';
 const ALL_SHEETS = {
@@ -711,8 +734,87 @@ function logout() {
 document.getElementById('loginPass').addEventListener('keydown', e => { if(e.key==='Enter') login(); });
 document.getElementById('loginUser').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('loginPass').focus(); });
 
-// ページ読み込み時に有効なセッションがあれば自動ログイン
-restoreSession();
+// ── QRログイン（1分間有効・端末間で同じアカウントにログイン）──
+const QR_DURATION = 60 * 1000; // 1分
+let qrTimer = null;
+
+function b64encode(str){ return btoa(unescape(encodeURIComponent(str))); }
+function b64decode(str){ return decodeURIComponent(escape(atob(str))); }
+
+function showLoginQR(idx) {
+  const a = getAccounts()[idx];
+  if (!a) return;
+  if (typeof qrcode === 'undefined') {
+    alert('QRライブラリを読み込めませんでした。インターネット接続を確認してください。');
+    return;
+  }
+  const exp = Date.now() + QR_DURATION;
+  const payload = { u:a.username, p:a.password, r:a.role, s:a.sheets||ALL_SHEET_KEYS, exp };
+  const token = b64encode(JSON.stringify(payload));
+  const url = location.origin + location.pathname + '#login=' + encodeURIComponent(token);
+
+  // 端末内でQR生成（認証情報は外部に送信されない）
+  const qr = qrcode(0, 'M');
+  qr.addData(url);
+  qr.make();
+  document.getElementById('qrCanvas').innerHTML = qr.createImgTag(5, 8);
+  document.getElementById('qrCanvas').querySelector('img').style.borderRadius = '8px';
+  document.getElementById('qrUserName').textContent = a.username;
+
+  // カウントダウン
+  clearInterval(qrTimer);
+  let remain = Math.round(QR_DURATION/1000);
+  document.getElementById('qrCountdown').textContent = remain;
+  qrTimer = setInterval(() => {
+    remain--;
+    document.getElementById('qrCountdown').textContent = Math.max(0, remain);
+    if (remain <= 0) {
+      clearInterval(qrTimer);
+      document.getElementById('qrCanvas').innerHTML =
+        '<div style="color:var(--danger);font-weight:700;padding:40px 0">有効期限が切れました<br>もう一度発行してください</div>';
+    }
+  }, 1000);
+
+  document.getElementById('qrOverlay').classList.add('open');
+}
+function closeQR(e) {
+  if (!e || e.target === document.getElementById('qrOverlay')) {
+    clearInterval(qrTimer);
+    document.getElementById('qrOverlay').classList.remove('open');
+  }
+}
+
+// QR経由でアクセスされた場合の自動ログイン
+function handleLoginQR() {
+  const m = (location.hash||'').match(/#login=([^&]+)/);
+  if (!m) return false;
+  // ハッシュを消す（認証情報を残さない）
+  history.replaceState(null, '', location.pathname + location.search);
+  try {
+    const p = JSON.parse(b64decode(decodeURIComponent(m[1])));
+    if (!p.exp || Date.now() > p.exp) {
+      alert('このログインQRは有効期限が切れています。管理者に再発行を依頼してください。');
+      return false;
+    }
+    // この端末にアカウントを保存（次回以降は通常ログインも可能）
+    const accounts = getAccounts();
+    const existing = accounts.find(a => a.username === p.u);
+    if (existing) {
+      existing.password = p.p; existing.role = p.r; existing.sheets = p.s;
+    } else {
+      accounts.push({ username:p.u, password:p.p, role:p.r, sheets:p.s });
+    }
+    saveAccounts(accounts);
+    const found = getAccounts().find(a => a.username === p.u);
+    enterApp(found);
+    return true;
+  } catch(e) {
+    return false;
+  }
+}
+
+// ページ読み込み時：QRログイン → 通常セッション復元 の順で判定
+if (!handleLoginQR()) restoreSession();
 
 // ── TABS ──
 function buildTabs() {
@@ -1066,7 +1168,10 @@ function renderAccountList() {
           <div class="acct-name">${escHtml(a.username)} ${isSelf?'<span style="font-size:11px;color:var(--text-3)">（自分）</span>':''}</div>
           <span class="acct-role ${a.role}">${a.role==='admin'?'管理者':'一般ユーザー'}</span>
         </div>
-        ${!isSelf?`<button class="btn-del" onclick="deleteAccount(${i})">削除</button>`:''}
+        <div style="display:flex;gap:6px">
+          ${a.role!=='admin'?`<button class="btn-qr" onclick="showLoginQR(${i})">📲 QR発行</button>`:''}
+          ${!isSelf?`<button class="btn-del" onclick="deleteAccount(${i})">削除</button>`:''}
+        </div>
       </div>
       <div class="sheet-perms">
         <span style="font-size:11px;color:var(--text-3);font-weight:600;align-self:center">アクセス：</span>
