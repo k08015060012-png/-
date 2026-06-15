@@ -1,4 +1,5 @@
-const CACHE = 'zaiko-v1';
+// ※ アカウント・ログイン情報はlocalStorageに保存され、ここのキャッシュ更新では消えません
+const CACHE = 'zaiko-v2';
 const ASSETS = [
   './在庫検索アプリ.html',
   './manifest.json',

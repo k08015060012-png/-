@@ -181,8 +181,17 @@
     transition: border-color .15s;
   }
   .search-field input:focus { outline: none; border-color: var(--primary); background: white; }
+  .search-field select {
+    width: 100%; padding: 9px 12px;
+    border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+    font-size: 13px; background: var(--surface-2); color: var(--text);
+    appearance: none; -webkit-appearance: none; cursor: pointer;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='3'><path d='M6 9l6 6 6-6'/></svg>");
+    background-repeat: no-repeat; background-position: right 8px center; padding-right: 26px;
+  }
+  .search-field select:focus { outline: none; border-color: var(--primary); background-color: white; }
   .price-range { display: flex; align-items: center; gap: 6px; }
-  .price-range input { flex: 1; }
+  .price-range input, .price-range select { flex: 1; min-width: 0; }
   .price-range span { font-size: 12px; color: var(--text-3); flex-shrink: 0; }
   .search-field.full { grid-column: span 2; }
   .search-actions { display: flex; gap: 8px; margin-top: 12px; }
@@ -482,9 +491,33 @@
           <div class="search-field">
             <label>金額（万円）</label>
             <div class="price-range">
-              <input type="number" id="s_priceMin" placeholder="最小">
+              <select id="s_priceMin">
+                <option value="">最小</option>
+                <option value="0">0万</option>
+                <option value="10">10万</option>
+                <option value="20">20万</option>
+                <option value="30">30万</option>
+                <option value="40">40万</option>
+                <option value="50">50万</option>
+                <option value="60">60万</option>
+                <option value="70">70万</option>
+                <option value="80">80万</option>
+                <option value="90">90万</option>
+              </select>
               <span>〜</span>
-              <input type="number" id="s_priceMax" placeholder="最大">
+              <select id="s_priceMax">
+                <option value="">最大</option>
+                <option value="10">10万</option>
+                <option value="20">20万</option>
+                <option value="30">30万</option>
+                <option value="40">40万</option>
+                <option value="50">50万</option>
+                <option value="60">60万</option>
+                <option value="70">70万</option>
+                <option value="80">80万</option>
+                <option value="90">90万</option>
+                <option value="100">100万〜</option>
+              </select>
             </div>
           </div>
         </div>
@@ -777,7 +810,8 @@ function doSearch() {
   const chassis = document.getElementById('s_chassis').value.trim();
   const year    = document.getElementById('s_year').value.trim().toLowerCase();
   const pMin    = parseFloat(document.getElementById('s_priceMin').value)||0;
-  const pMax    = parseFloat(document.getElementById('s_priceMax').value)||Infinity;
+  let   pMax    = parseFloat(document.getElementById('s_priceMax').value)||Infinity;
+  if (pMax >= 100) pMax = Infinity; // 「100万〜」は上限なし扱い
   filteredData = allData.filter(r => {
     if (maker   && !(r[COL.maker]||'').toLowerCase().includes(maker))   return false;
     if (model   && !(r[COL.model]||'').toLowerCase().includes(model))   return false;
