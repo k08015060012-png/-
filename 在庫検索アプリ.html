@@ -488,7 +488,11 @@
           </div>
           <div class="search-field">
             <label>年式</label>
-            <input type="text" id="s_year" placeholder="H29、R1…">
+            <div class="price-range">
+              <select id="s_yearMin"><option value="">最小</option></select>
+              <span>〜</span>
+              <select id="s_yearMax"><option value="">最大</option></select>
+            </div>
           </div>
           <div class="search-field">
             <label>金額（万円）</label>
@@ -737,6 +741,7 @@ function switchTab(tab) {
     allData = dataCache[tab];
     filteredData = [...allData];
     populateMakers();
+    populateYears();
     renderAll(filteredData);
     document.getElementById('countLabel').innerHTML = `全 <strong>${allData.length}</strong> 件`;
   } else {
@@ -817,6 +822,28 @@ function populateMakers() {
   if (present.includes(cur)) sel.value = cur;
 }
 
+// ── 年式プルダウン（元号→西暦に変換して範囲指定）──
+function yearToNum(s) {
+  const m = String(s||'').match(/^([HR])(\d+)/);
+  if (!m) return null;
+  const n = parseInt(m[2]);
+  return m[1] === 'H' ? 1988 + n : 2018 + n; // 平成n=1988+n, 令和n=2018+n
+}
+function populateYears() {
+  const minSel = document.getElementById('s_yearMin');
+  const maxSel = document.getElementById('s_yearMax');
+  if (!minSel || !maxSel) return;
+  const curMin = minSel.value, curMax = maxSel.value;
+  const set = new Set();
+  allData.forEach(r => { const m = String(r[COL.year]||'').match(/^([HR]\d+)/); if (m) set.add(m[1]); });
+  const list = [...set].sort((a,b) => (yearToNum(a)-yearToNum(b)) || (a[0]<b[0]?-1:1));
+  const opts = list.map(y => `<option value="${escHtml(y)}">${escHtml(y)}</option>`).join('');
+  minSel.innerHTML = '<option value="">最小</option>' + opts;
+  maxSel.innerHTML = '<option value="">最大</option>' + opts;
+  if (list.includes(curMin)) minSel.value = curMin;
+  if (list.includes(curMax)) maxSel.value = curMax;
+}
+
 // ── SEARCH ──
 function toggleSearch() {
   searchVisible = !searchVisible;
@@ -828,7 +855,8 @@ function doSearch() {
   const model   = document.getElementById('s_model').value.trim().toLowerCase();
   const color   = document.getElementById('s_color').value.trim().toLowerCase();
   const chassis = document.getElementById('s_chassis').value.trim();
-  const year    = document.getElementById('s_year').value.trim().toLowerCase();
+  const yMin    = yearToNum(document.getElementById('s_yearMin').value);
+  const yMax    = yearToNum(document.getElementById('s_yearMax').value);
   const pMin    = parseFloat(document.getElementById('s_priceMin').value)||0;
   let   pMax    = parseFloat(document.getElementById('s_priceMax').value)||Infinity;
   if (pMax >= 100) pMax = Infinity; // 「100万〜」は上限なし扱い
@@ -837,7 +865,12 @@ function doSearch() {
     if (model   && !(r[COL.model]||'').toLowerCase().includes(model))   return false;
     if (color   && !(r[COL.color]||'').toLowerCase().includes(color))   return false;
     if (chassis && !(r[COL.chassis]||'').includes(chassis))             return false;
-    if (year    && !(r[COL.year]||'').toLowerCase().includes(year))     return false;
+    if (yMin !== null || yMax !== null) {
+      const cy = yearToNum(r[COL.year]);
+      if (cy === null) return false;
+      if (yMin !== null && cy < yMin) return false;
+      if (yMax !== null && cy > yMax) return false;
+    }
     const p = parsePrice(r[COL.price]) / 10000;
     if (pMin>0 && p<pMin) return false;
     if (pMax<Infinity && p>pMax) return false;
@@ -856,7 +889,7 @@ function resetSearch() {
   }
 }
 function resetSearchInputs() {
-  ['s_maker','s_model','s_color','s_chassis','s_year','s_priceMin','s_priceMax']
+  ['s_maker','s_model','s_color','s_chassis','s_yearMin','s_yearMax','s_priceMin','s_priceMax']
     .forEach(id => { document.getElementById(id).value=''; });
 }
 function parsePrice(s) { return s ? parseInt(s.replace(/[¥￥,\s円]/g,''))||0 : 0; }
