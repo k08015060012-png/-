@@ -882,11 +882,9 @@ async function loadSheet(tabKey, silent=false) {
     dataCache[tabKey] = parsed;
     if (tabKey === currentTab) {
       allData = parsed;
-      filteredData = [...allData];
       populateMakers();
       populateYears();
-      renderAll(filteredData);
-      document.getElementById('countLabel').innerHTML = `全 <strong>${allData.length}</strong> 件`;
+      refreshView(); // 絞り込み・並び順を維持したまま再描画
     }
   } catch(e) {
     if (tabKey !== currentTab || silent) return;
@@ -1012,12 +1010,32 @@ function formatYen(v) {
 // ── SORT ──
 function sortBy(col) {
   if(sortCol===col) sortAsc=!sortAsc; else { sortCol=col; sortAsc=true; }
+  sortFilteredData();
+  renderAll(filteredData);
+}
+function sortFilteredData() {
+  if (sortCol < 0) return;
   filteredData.sort((a,b) => {
-    const av=a[col]||'', bv=b[col]||'';
+    const av=a[sortCol]||'', bv=b[sortCol]||'';
     const an=parseFloat(av.replace(/[¥,]/g,'')), bn=parseFloat(bv.replace(/[¥,]/g,''));
     const cmp = (!isNaN(an)&&!isNaN(bn)) ? an-bn : av.localeCompare(bv,'ja');
     return sortAsc ? cmp : -cmp;
   });
+}
+// 絞り込み条件が入力されているか
+function hasActiveSearch() {
+  return ['s_maker','s_model','s_color','s_chassis','s_yearMin','s_yearMax','s_priceMin','s_priceMax']
+    .some(id => { const el = document.getElementById(id); return el && el.value.trim() !== ''; });
+}
+// 現在の絞り込み・並び順を新しいデータに再適用（自動更新時に使用）
+function refreshView() {
+  if (hasActiveSearch()) {
+    doSearch(); // フィルタを再適用（件数表示も更新）
+  } else {
+    filteredData = [...allData];
+    document.getElementById('countLabel').innerHTML = `全 <strong>${allData.length}</strong> 件`;
+  }
+  sortFilteredData();
   renderAll(filteredData);
 }
 
