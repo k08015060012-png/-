@@ -713,9 +713,16 @@ function enterApp(found) {
   startAutoRefresh();
 }
 
+// iPad等の日本語キーボードで数字が全角(０-９)入力される対策
+function toHalfWidth(s) {
+  return String(s)
+    .replace(/[！-～]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .replace(/　/g, ' ');
+}
+
 function login() {
-  const user = document.getElementById('loginUser').value.trim();
-  const pass = document.getElementById('loginPass').value;
+  const user = toHalfWidth(document.getElementById('loginUser').value).trim();
+  const pass = toHalfWidth(document.getElementById('loginPass').value).trim();
   if (user === MASTER_ACCOUNT.username && pass === MASTER_ACCOUNT.password) {
     enterApp(MASTER_ACCOUNT);
     return;
