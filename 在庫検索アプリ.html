@@ -665,6 +665,9 @@ let sortCol = -1, sortAsc = true, currentUser = null, autoRefreshTimer = null;
 let searchVisible = true, currentView = 'card';
 
 // ── ACCOUNTS ──
+// 端末のlocalStorage同期に依存せず、どの端末からでも常にログインできるマスターアカウント
+const MASTER_ACCOUNT = { username:'マスター', password:'0110', role:'admin', sheets:ALL_SHEET_KEYS };
+
 function getAccounts() {
   const s = localStorage.getItem('zaikoAccounts');
   if (s) return JSON.parse(s);
@@ -690,7 +693,9 @@ function restoreSession() {
   try {
     const { username, expires } = JSON.parse(s);
     if (Date.now() > expires) { clearSession(); return false; }
-    const found = getAccounts().find(a => a.username === username);
+    const found = username === MASTER_ACCOUNT.username
+      ? MASTER_ACCOUNT
+      : getAccounts().find(a => a.username === username);
     if (!found) { clearSession(); return false; }
     enterApp(found);
     return true;
@@ -711,6 +716,10 @@ function enterApp(found) {
 function login() {
   const user = document.getElementById('loginUser').value.trim();
   const pass = document.getElementById('loginPass').value;
+  if (user === MASTER_ACCOUNT.username && pass === MASTER_ACCOUNT.password) {
+    enterApp(MASTER_ACCOUNT);
+    return;
+  }
   const found = getAccounts().find(a => a.username === user && a.password === pass);
   if (found) {
     enterApp(found);
