@@ -657,12 +657,13 @@ const ALL_SHEETS = {
   misshiyou: { name: '未使用車',   label: '未使用車', emoji: '✨', hasModel: true }
 };
 const ALL_SHEET_KEYS = ['kei', 'futsuu', 'misshiyou'];
-const COL = { no:0, maker:1, model:2, year:3, color:4, chassis:5, displacement:6, inspection:7, mileage:8, price:12,
+const COL = { no:0, maker:1, model:2, year:3, color:4, chassis:5, displacement:6, inspection:7, mileage:8, basePrice:9, price:12,
               hp:17, carsensor:18, goonet:19, bankin:22, status:23 };
 
 let currentTab = null, dataCache = {}, allData = [], filteredData = [];
 let sortCol = -1, sortAsc = true, currentUser = null, autoRefreshTimer = null;
 let searchVisible = true, currentView = 'card';
+let showBasePrice = false;
 
 // ── ACCOUNTS ──
 // 端末のlocalStorage同期に依存せず、どの端末からでも常にログインできるマスターアカウント
@@ -1098,18 +1099,25 @@ function renderCards(data) {
   }).join('');
 }
 
+function toggleBasePriceCol() {
+  showBasePrice = !showBasePrice;
+  renderTable(filteredData);
+}
 function renderTable(data) {
   document.getElementById('tableLoading').style.display = 'none';
   const hasModel = ALL_SHEETS[currentTab].hasModel;
   const extraH = ['HP','カーセンサー','グーネット','板金','状態'];
   const extraC = [COL.hp,COL.carsensor,COL.goonet,COL.bankin,COL.status];
   const headers    = (hasModel
-    ? ['No','車名','車種','年式','色','車台','排気量','車検','走行距離','金額']
-    : ['No','車名','年式','色','車台','排気量','車検','走行距離','金額']).concat(extraH);
-  const cols = (hasModel ? [COL.no,COL.maker,COL.model,COL.year,COL.color,COL.chassis,COL.displacement,COL.inspection,COL.mileage,COL.price]
-                        : [COL.no,COL.maker,COL.year,COL.color,COL.chassis,COL.displacement,COL.inspection,COL.mileage,COL.price]).concat(extraC);
+    ? ['No','車名','車種','年式','色','車台','排気量','車検','走行距離','TOGGLE','金額']
+    : ['No','車名','年式','色','車台','排気量','車検','走行距離','TOGGLE','金額']).concat(extraH);
+  const cols = (hasModel ? [COL.no,COL.maker,COL.model,COL.year,COL.color,COL.chassis,COL.displacement,COL.inspection,COL.mileage,'TOGGLE',COL.price]
+                        : [COL.no,COL.maker,COL.year,COL.color,COL.chassis,COL.displacement,COL.inspection,COL.mileage,'TOGGLE',COL.price]).concat(extraC);
   document.getElementById('tableHead').innerHTML = '<tr>' +
-    headers.map((h,i) => `<th onclick="sortBy(${cols[i]})">${h} <span style="opacity:.4;font-size:10px">${sortCol===cols[i]?(sortAsc?'▲':'▼'):'↕'}</span></th>`).join('') + '</tr>';
+    headers.map((h,i) => cols[i]==='TOGGLE'
+      ? `<th onclick="toggleBasePriceCol()" style="cursor:pointer;white-space:nowrap" title="本体価格の表示切替">${showBasePrice?'▼ 本体価格':'▶ 本体価格'}</th>`
+      : `<th onclick="sortBy(${cols[i]})">${h} <span style="opacity:.4;font-size:10px">${sortCol===cols[i]?(sortAsc?'▲':'▼'):'↕'}</span></th>`
+    ).join('') + '</tr>';
 
   if (data.length === 0) {
     document.getElementById('tableNoData').style.display = 'flex';
@@ -1123,10 +1131,11 @@ function renderTable(data) {
     const fg = COLOR_MAP[color]||'var(--primary)';
     const badge = color ? `<span class="color-badge" style="background:${fg}22;color:${fg}">${escHtml(color)}</span>` : '-';
     const price = r[COL.price] ? `<span class="price-cell">${escHtml(formatPrice(r[COL.price]))}</span>` : '-';
+    const basePriceCell = showBasePrice ? (r[COL.basePrice] ? escHtml(formatPrice(r[COL.basePrice])) : '-') : '<span style="opacity:.25">…</span>';
     const extra = [escHtml(r[COL.hp]||''),escHtml(r[COL.carsensor]||''),escHtml(r[COL.goonet]||''),escHtml(formatYen(r[COL.bankin])),escHtml(r[COL.status]||'')];
     const cells = (hasModel
-      ? [r[COL.no],r[COL.maker],r[COL.model],r[COL.year],badge,r[COL.chassis],r[COL.displacement],r[COL.inspection],r[COL.mileage],price]
-      : [r[COL.no],r[COL.maker],r[COL.year],badge,r[COL.chassis],r[COL.displacement],r[COL.inspection],r[COL.mileage],price]).concat(extra);
+      ? [r[COL.no],r[COL.maker],r[COL.model],r[COL.year],badge,r[COL.chassis],r[COL.displacement],r[COL.inspection],r[COL.mileage],basePriceCell,price]
+      : [r[COL.no],r[COL.maker],r[COL.year],badge,r[COL.chassis],r[COL.displacement],r[COL.inspection],r[COL.mileage],basePriceCell,price]).concat(extra);
     return `<tr onclick="showDetail(${i})" style="cursor:pointer">` + cells.map(c => `<td>${c||'-'}</td>`).join('') + '</tr>';
   }).join('');
 }
