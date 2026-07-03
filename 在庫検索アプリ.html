@@ -1233,8 +1233,8 @@ async function toggleSheet(username, key, checked) {
   await accountApi({ action:'updateSheets', u:username, sheets:a.sheets.join(',') });
 }
 async function addAccount() {
-  const user = document.getElementById('newUser').value.trim();
-  const pass = document.getElementById('newPass').value;
+  const user = toHalfWidth(document.getElementById('newUser').value).trim();
+  const pass = toHalfWidth(document.getElementById('newPass').value).trim();
   const role = document.getElementById('newRole').value;
   const err  = document.getElementById('addAccountError');
   if (!user||!pass) { err.textContent='ユーザー名とパスワードを入力してください'; return; }

@@ -1,5 +1,5 @@
 // ※ アカウント・ログイン情報はlocalStorageに保存され、ここのキャッシュ更新では消えません
-const CACHE = 'zaiko-v2';
+const CACHE = 'zaiko-v3';
 const ASSETS = [
   './在庫検索アプリ.html',
   './manifest.json',
@@ -23,7 +23,7 @@ self.addEventListener('fetch', e => {
   // GASへのAPIリクエストはキャッシュしない（常に最新データを取得）
   if (e.request.url.includes('script.google.com')) return;
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: 'no-store' })
       .then(res => {
         const clone = res.clone();
         caches.open(CACHE).then(c => c.put(e.request, clone));
