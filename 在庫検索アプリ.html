@@ -667,44 +667,41 @@ let searchVisible = true, currentView = 'card';
 // ── ACCOUNTS ──
 // 端末のlocalStorage同期に依存せず、どの端末からでも常にログインできるマスターアカウント
 const MASTER_ACCOUNT = { username:'マスター', password:'0110', role:'admin', sheets:ALL_SHEET_KEYS };
+let accountsCache = [];
 
-function getAccounts() {
-  const s = localStorage.getItem('zaikoAccounts');
-  if (s) return JSON.parse(s);
-  const d = [
-    { username:'admin', password:'admin123', role:'admin', sheets:ALL_SHEET_KEYS },
-    { username:'user',  password:'user123',  role:'user',  sheets:['kei'] }
-  ];
-  localStorage.setItem('zaikoAccounts', JSON.stringify(d));
-  return d;
+async function accountApi(params) {
+  const url = `${GAS_URL}?${new URLSearchParams(params).toString()}`;
+  const res = await fetch(url, { redirect:'follow' });
+  return res.json();
 }
-function saveAccounts(a) { localStorage.setItem('zaikoAccounts', JSON.stringify(a)); }
+
+// 旧バージョンで端末のlocalStorageだけに保存されていたアカウント（未移行分のフォールバック用）
+function getLocalAccounts() {
+  const s = localStorage.getItem('zaikoAccounts');
+  return s ? JSON.parse(s) : [];
+}
 
 // ── AUTH ──
 const SESSION_DURATION = 30 * 60 * 1000; // 30分
 
-function saveSession(username) {
-  localStorage.setItem('zaikoSession', JSON.stringify({ username, expires: Date.now() + SESSION_DURATION }));
+function saveSession(account) {
+  localStorage.setItem('zaikoSession', JSON.stringify({ ...account, expires: Date.now() + SESSION_DURATION }));
 }
 function clearSession() { localStorage.removeItem('zaikoSession'); }
 function restoreSession() {
   const s = localStorage.getItem('zaikoSession');
   if (!s) return false;
   try {
-    const { username, expires } = JSON.parse(s);
-    if (Date.now() > expires) { clearSession(); return false; }
-    const found = username === MASTER_ACCOUNT.username
-      ? MASTER_ACCOUNT
-      : getAccounts().find(a => a.username === username);
-    if (!found) { clearSession(); return false; }
-    enterApp(found);
+    const session = JSON.parse(s);
+    if (Date.now() > session.expires) { clearSession(); return false; }
+    enterApp(session);
     return true;
   } catch(e) { clearSession(); return false; }
 }
 
 function enterApp(found) {
   currentUser = found;
-  saveSession(found.username);
+  saveSession(found);
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('app').classList.add('visible');
   document.getElementById('currentUserLabel').textContent = found.username;
@@ -720,18 +717,27 @@ function toHalfWidth(s) {
     .replace(/　/g, ' ');
 }
 
-function login() {
+async function login() {
   const user = toHalfWidth(document.getElementById('loginUser').value).trim();
   const pass = toHalfWidth(document.getElementById('loginPass').value).trim();
+  const err = document.getElementById('loginError');
+  err.textContent = '';
+
   if (user === MASTER_ACCOUNT.username && pass === MASTER_ACCOUNT.password) {
     enterApp(MASTER_ACCOUNT);
     return;
   }
-  const found = getAccounts().find(a => a.username === user && a.password === pass);
+
+  try {
+    const res = await accountApi({ action:'login', u:user, p:pass });
+    if (res.ok) { enterApp({ username:res.username, role:res.role, sheets:res.sheets }); return; }
+  } catch(e) { /* サーバー未接続時はローカル記録にフォールバック */ }
+
+  const found = getLocalAccounts().find(a => a.username === user && a.password === pass);
   if (found) {
     enterApp(found);
   } else {
-    document.getElementById('loginError').textContent = 'ユーザー名またはパスワードが間違っています';
+    err.textContent = 'ユーザー名またはパスワードが間違っています';
     document.getElementById('defaultInfo').style.display = 'block';
   }
 }
@@ -751,31 +757,35 @@ document.getElementById('loginPass').addEventListener('keydown', e => { if(e.key
 document.getElementById('loginUser').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('loginPass').focus(); });
 
 // ── QRログイン（1分間有効・端末間で同じアカウントにログイン）──
+// パスワードはQRに含めず、サーバー側で発行する使い捨てトークンのみをやり取りする
 const QR_DURATION = 60 * 1000; // 1分
 let qrTimer = null;
 
-function b64encode(str){ return btoa(unescape(encodeURIComponent(str))); }
-function b64decode(str){ return decodeURIComponent(escape(atob(str))); }
-
-function showLoginQR(idx) {
-  const a = getAccounts()[idx];
+async function showLoginQR(idx) {
+  const a = accountsCache[idx];
   if (!a) return;
   if (typeof qrcode === 'undefined') {
     alert('QRライブラリを読み込めませんでした。インターネット接続を確認してください。');
     return;
   }
-  const exp = Date.now() + QR_DURATION;
-  const payload = { u:a.username, p:a.password, r:a.role, s:a.sheets||ALL_SHEET_KEYS, exp };
-  const token = b64encode(JSON.stringify(payload));
-  const url = location.origin + location.pathname + '#login=' + encodeURIComponent(token);
+  document.getElementById('qrCanvas').innerHTML = '<div style="padding:40px 0;color:var(--text-3)">発行中…</div>';
+  document.getElementById('qrUserName').textContent = a.username;
+  document.getElementById('qrOverlay').classList.add('open');
 
-  // 端末内でQR生成（認証情報は外部に送信されない）
+  let res;
+  try { res = await accountApi({ action:'issueQrToken', u:a.username }); }
+  catch(e) { res = { ok:false }; }
+  if (!res.ok) {
+    document.getElementById('qrCanvas').innerHTML = '<div style="color:var(--danger);font-weight:700;padding:40px 0">発行に失敗しました</div>';
+    return;
+  }
+
+  const url = location.origin + location.pathname + '#login=' + encodeURIComponent(res.token);
   const qr = qrcode(0, 'M');
   qr.addData(url);
   qr.make();
   document.getElementById('qrCanvas').innerHTML = qr.createImgTag(5, 8);
   document.getElementById('qrCanvas').querySelector('img').style.borderRadius = '8px';
-  document.getElementById('qrUserName').textContent = a.username;
 
   // カウントダウン
   clearInterval(qrTimer);
@@ -790,8 +800,6 @@ function showLoginQR(idx) {
         '<div style="color:var(--danger);font-weight:700;padding:40px 0">有効期限が切れました<br>もう一度発行してください</div>';
     }
   }, 1000);
-
-  document.getElementById('qrOverlay').classList.add('open');
 }
 function closeQR(e) {
   if (!e || e.target === document.getElementById('qrOverlay')) {
@@ -800,29 +808,17 @@ function closeQR(e) {
   }
 }
 
-// QR経由でアクセスされた場合の自動ログイン
-function handleLoginQR() {
+// QR経由でアクセスされた場合の自動ログイン（サーバーの使い捨てトークンを検証。端末への保存は不要）
+async function handleLoginQR() {
   const m = (location.hash||'').match(/#login=([^&]+)/);
   if (!m) return false;
-  // ハッシュを消す（認証情報を残さない）
+  // ハッシュを消す（トークンを残さない）
   history.replaceState(null, '', location.pathname + location.search);
   try {
-    const p = JSON.parse(b64decode(decodeURIComponent(m[1])));
-    if (!p.exp || Date.now() > p.exp) {
-      alert('このログインQRは有効期限が切れています。管理者に再発行を依頼してください。');
-      return false;
-    }
-    // この端末にアカウントを保存（次回以降は通常ログインも可能）
-    const accounts = getAccounts();
-    const existing = accounts.find(a => a.username === p.u);
-    if (existing) {
-      existing.password = p.p; existing.role = p.r; existing.sheets = p.s;
-    } else {
-      accounts.push({ username:p.u, password:p.p, role:p.r, sheets:p.s });
-    }
-    saveAccounts(accounts);
-    const found = getAccounts().find(a => a.username === p.u);
-    enterApp(found);
+    const token = decodeURIComponent(m[1]);
+    const res = await accountApi({ action:'loginByToken', token });
+    if (!res.ok) { alert('このログインQRは無効か、有効期限が切れています。管理者に再発行を依頼してください。'); return false; }
+    enterApp({ username:res.username, role:res.role, sheets:res.sheets });
     return true;
   } catch(e) {
     return false;
@@ -830,7 +826,7 @@ function handleLoginQR() {
 }
 
 // ページ読み込み時：QRログイン → 通常セッション復元 の順で判定
-if (!handleLoginQR()) restoreSession();
+handleLoginQR().then(ok => { if (!ok) restoreSession(); });
 
 // ── TABS ──
 function buildTabs() {
@@ -1181,19 +1177,33 @@ function setView(v) {
 }
 
 // ── ACCOUNTS ──
-function openAccounts() { renderAccountList(); document.getElementById('accountOverlay').classList.add('open'); }
+async function openAccounts() {
+  document.getElementById('accountOverlay').classList.add('open');
+  document.getElementById('accountList').innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-3)">読み込み中…</div>';
+  await refreshAccountList();
+}
 function closeAccounts(e) {
   if (!e || e.target === document.getElementById('accountOverlay')) {
     document.getElementById('accountOverlay').classList.remove('open');
   }
 }
+async function refreshAccountList() {
+  try {
+    const res = await accountApi({ action:'list' });
+    accountsCache = res.ok ? res.accounts : [];
+  } catch(e) {
+    document.getElementById('accountList').innerHTML = '<div style="text-align:center;padding:20px;color:var(--danger)">読み込み失敗。通信環境を確認してください。</div>';
+    return;
+  }
+  renderAccountList();
+}
 function renderAccountList() {
-  const accounts = getAccounts();
+  const accounts = accountsCache;
   document.getElementById('accountList').innerHTML = accounts.map((a,i) => {
     const isSelf = a.username === currentUser.username;
     const sheets = a.sheets || ALL_SHEET_KEYS;
     const boxes = ALL_SHEET_KEYS.map(k =>
-      `<label><input type="checkbox" ${sheets.includes(k)?'checked':''} onchange="toggleSheet(${i},'${k}',this.checked)"
+      `<label><input type="checkbox" ${sheets.includes(k)?'checked':''} onchange="toggleSheet('${a.username}','${k}',this.checked)"
         ${isSelf||a.role==='admin'?'disabled':''}> ${ALL_SHEETS[k].emoji} ${ALL_SHEETS[k].label}</label>`
     ).join('');
     return `<div class="account-row">
@@ -1204,7 +1214,7 @@ function renderAccountList() {
         </div>
         <div style="display:flex;gap:6px">
           ${a.role!=='admin'?`<button class="btn-qr" onclick="showLoginQR(${i})">📲 QR発行</button>`:''}
-          ${!isSelf?`<button class="btn-del" onclick="deleteAccount(${i})">削除</button>`:''}
+          ${!isSelf?`<button class="btn-del" onclick="deleteAccount('${a.username}')">削除</button>`:''}
         </div>
       </div>
       <div class="sheet-perms">
@@ -1214,37 +1224,33 @@ function renderAccountList() {
     </div>`;
   }).join('');
 }
-function toggleSheet(idx, key, checked) {
-  const accounts = getAccounts();
-  const a = accounts[idx];
-  if (!a.sheets) a.sheets = [...ALL_SHEET_KEYS];
-  if (checked) { if(!a.sheets.includes(key)) a.sheets.push(key); }
-  else { a.sheets = a.sheets.filter(s => s!==key); }
-  saveAccounts(accounts);
+async function toggleSheet(username, key, checked) {
+  const a = accountsCache.find(x => x.username === username);
+  if (!a) return;
+  const sheets = new Set(a.sheets || []);
+  if (checked) sheets.add(key); else sheets.delete(key);
+  a.sheets = [...sheets];
+  await accountApi({ action:'updateSheets', u:username, sheets:a.sheets.join(',') });
 }
-function addAccount() {
+async function addAccount() {
   const user = document.getElementById('newUser').value.trim();
   const pass = document.getElementById('newPass').value;
   const role = document.getElementById('newRole').value;
   const err  = document.getElementById('addAccountError');
   if (!user||!pass) { err.textContent='ユーザー名とパスワードを入力してください'; return; }
-  const accounts = getAccounts();
-  if (accounts.find(a => a.username===user)) { err.textContent='そのユーザー名はすでに使われています'; return; }
   const sheets = ALL_SHEET_KEYS.filter(k => document.getElementById('new_'+k).checked);
-  if (sheets.length===0) { err.textContent='最低1つのシートを選択してください'; return; }
-  accounts.push({ username:user, password:pass, role, sheets: role==='admin'?ALL_SHEET_KEYS:sheets });
-  saveAccounts(accounts);
+  if (role!=='admin' && sheets.length===0) { err.textContent='最低1つのシートを選択してください'; return; }
+  const res = await accountApi({ action:'add', u:user, p:pass, role, sheets:(role==='admin'?ALL_SHEET_KEYS:sheets).join(',') });
+  if (!res.ok) { err.textContent = res.error==='exists' ? 'そのユーザー名はすでに使われています' : '追加に失敗しました'; return; }
   document.getElementById('newUser').value = '';
   document.getElementById('newPass').value = '';
   err.textContent = '';
-  renderAccountList();
+  await refreshAccountList();
 }
-function deleteAccount(i) {
+async function deleteAccount(username) {
   if (!confirm('このアカウントを削除しますか？')) return;
-  const accounts = getAccounts();
-  accounts.splice(i, 1);
-  saveAccounts(accounts);
-  renderAccountList();
+  await accountApi({ action:'delete', u:username });
+  await refreshAccountList();
 }
 
 // ── UTILITY ──
