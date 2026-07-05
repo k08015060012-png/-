@@ -543,6 +543,7 @@
       <div class="result-count" id="countLabel">読み込み中…</div>
       <div class="status-right">
         <div class="live-badge"><div class="live-dot"></div>自動更新</div>
+        <button class="reload-btn" id="basePriceToggleBtn" onclick="toggleBasePriceCol()" style="display:none">＋ 本体価格</button>
         <button class="reload-btn" onclick="forceReload()">↻ 更新</button>
       </div>
     </div>
@@ -1101,6 +1102,7 @@ function renderCards(data) {
 
 function toggleBasePriceCol() {
   showBasePrice = !showBasePrice;
+  document.getElementById('basePriceToggleBtn').textContent = showBasePrice ? '－ 本体価格' : '＋ 本体価格';
   renderTable(filteredData);
 }
 function renderTable(data) {
@@ -1108,14 +1110,16 @@ function renderTable(data) {
   const hasModel = ALL_SHEETS[currentTab].hasModel;
   const extraH = ['HP','カーセンサー','グーネット','板金','状態'];
   const extraC = [COL.hp,COL.carsensor,COL.goonet,COL.bankin,COL.status];
-  const headers    = (hasModel
-    ? ['No','車名','車種','年式','色','車台','排気量','車検','走行距離','TOGGLE','金額']
-    : ['No','車名','年式','色','車台','排気量','車検','走行距離','TOGGLE','金額']).concat(extraH);
-  const cols = (hasModel ? [COL.no,COL.maker,COL.model,COL.year,COL.color,COL.chassis,COL.displacement,COL.inspection,COL.mileage,'TOGGLE',COL.price]
-                        : [COL.no,COL.maker,COL.year,COL.color,COL.chassis,COL.displacement,COL.inspection,COL.mileage,'TOGGLE',COL.price]).concat(extraC);
+  const baseHeaders = (hasModel
+    ? ['No','車名','車種','年式','色','車台','排気量','車検','走行距離']
+    : ['No','車名','年式','色','車台','排気量','車検','走行距離']);
+  const baseCols = (hasModel ? [COL.no,COL.maker,COL.model,COL.year,COL.color,COL.chassis,COL.displacement,COL.inspection,COL.mileage]
+                        : [COL.no,COL.maker,COL.year,COL.color,COL.chassis,COL.displacement,COL.inspection,COL.mileage]);
+  const headers = baseHeaders.concat(showBasePrice ? ['本体価格','金額'] : ['金額']).concat(extraH);
+  const cols = baseCols.concat(showBasePrice ? ['BASEPRICE',COL.price] : [COL.price]).concat(extraC);
   document.getElementById('tableHead').innerHTML = '<tr>' +
-    headers.map((h,i) => cols[i]==='TOGGLE'
-      ? `<th onclick="toggleBasePriceCol()" style="cursor:pointer;white-space:nowrap" title="本体価格の表示切替">${showBasePrice?'▼ 本体価格':'▶ 本体価格'}</th>`
+    headers.map((h,i) => cols[i]==='BASEPRICE'
+      ? `<th onclick="toggleBasePriceCol()" style="cursor:pointer;white-space:nowrap" title="本体価格を隠す">▼ 本体価格</th>`
       : `<th onclick="sortBy(${cols[i]})">${h} <span style="opacity:.4;font-size:10px">${sortCol===cols[i]?(sortAsc?'▲':'▼'):'↕'}</span></th>`
     ).join('') + '</tr>';
 
@@ -1131,11 +1135,12 @@ function renderTable(data) {
     const fg = COLOR_MAP[color]||'var(--primary)';
     const badge = color ? `<span class="color-badge" style="background:${fg}22;color:${fg}">${escHtml(color)}</span>` : '-';
     const price = r[COL.price] ? `<span class="price-cell">${escHtml(formatPrice(r[COL.price]))}</span>` : '-';
-    const basePriceCell = showBasePrice ? (r[COL.basePrice] ? escHtml(formatPrice(r[COL.basePrice])) : '-') : '<span style="opacity:.25">…</span>';
+    const basePriceCell = r[COL.basePrice] ? escHtml(formatPrice(r[COL.basePrice])) : '-';
     const extra = [escHtml(r[COL.hp]||''),escHtml(r[COL.carsensor]||''),escHtml(r[COL.goonet]||''),escHtml(formatYen(r[COL.bankin])),escHtml(r[COL.status]||'')];
     const cells = (hasModel
-      ? [r[COL.no],r[COL.maker],r[COL.model],r[COL.year],badge,r[COL.chassis],r[COL.displacement],r[COL.inspection],r[COL.mileage],basePriceCell,price]
-      : [r[COL.no],r[COL.maker],r[COL.year],badge,r[COL.chassis],r[COL.displacement],r[COL.inspection],r[COL.mileage],basePriceCell,price]).concat(extra);
+      ? [r[COL.no],r[COL.maker],r[COL.model],r[COL.year],badge,r[COL.chassis],r[COL.displacement],r[COL.inspection],r[COL.mileage]]
+      : [r[COL.no],r[COL.maker],r[COL.year],badge,r[COL.chassis],r[COL.displacement],r[COL.inspection],r[COL.mileage]])
+      .concat(showBasePrice ? [basePriceCell,price] : [price]).concat(extra);
     return `<tr onclick="showDetail(${i})" style="cursor:pointer">` + cells.map(c => `<td>${c||'-'}</td>`).join('') + '</tr>';
   }).join('');
 }
@@ -1183,6 +1188,7 @@ function setView(v) {
   const area = document.getElementById('scrollArea');
   if (v==='table') area.classList.add('show-table');
   else area.classList.remove('show-table');
+  document.getElementById('basePriceToggleBtn').style.display = v==='table' ? '' : 'none';
 }
 
 // ── ACCOUNTS ──
