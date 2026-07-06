@@ -197,6 +197,32 @@
   .price-range input, .price-range select { flex: 1; min-width: 0; }
   .price-range span { font-size: 12px; color: var(--text-3); flex-shrink: 0; }
   .search-field.full { grid-column: span 2; }
+
+  /* ─── PRICE SLIDER ─── */
+  .price-histogram { display: flex; align-items: flex-end; gap: 1px; height: 32px; margin-bottom: 4px; }
+  .price-histogram .hist-bar { flex: 1; background: var(--border); border-radius: 1px 1px 0 0; min-height: 2px; }
+  .price-slider-area { position: relative; height: 20px; }
+  .price-slider-track {
+    position: absolute; top: 50%; left: 0; right: 0; height: 4px;
+    background: var(--border); border-radius: 2px; transform: translateY(-50%);
+  }
+  .price-slider-range { position: absolute; top: 0; bottom: 0; background: var(--primary); border-radius: 2px; }
+  .price-thumb {
+    position: absolute; top: 0; left: 0; width: 100%; height: 20px; margin: 0;
+    -webkit-appearance: none; appearance: none; background: transparent; pointer-events: none;
+  }
+  .price-thumb::-webkit-slider-thumb {
+    -webkit-appearance: none; pointer-events: auto;
+    width: 18px; height: 18px; border-radius: 50%; background: var(--primary);
+    border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.3); cursor: pointer;
+  }
+  .price-thumb::-moz-range-thumb {
+    pointer-events: auto; width: 18px; height: 18px; border-radius: 50%; background: var(--primary);
+    border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.3); cursor: pointer;
+  }
+  .price-thumb::-webkit-slider-runnable-track { background: transparent; height: 20px; }
+  .price-thumb::-moz-range-track { background: transparent; height: 20px; }
+  .price-slider-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-2); font-weight: 600; margin-top: 8px; }
   .search-actions { display: flex; gap: 8px; margin-top: 12px; }
   .btn-primary {
     flex: 1; padding: 11px; background: var(--primary); color: white;
@@ -498,36 +524,17 @@
               <select id="s_yearMax"><option value="">最大</option></select>
             </div>
           </div>
-          <div class="search-field">
+          <div class="search-field full">
             <label>金額（万円）</label>
-            <div class="price-range">
-              <select id="s_priceMin">
-                <option value="">最小</option>
-                <option value="0">0万</option>
-                <option value="10">10万</option>
-                <option value="20">20万</option>
-                <option value="30">30万</option>
-                <option value="40">40万</option>
-                <option value="50">50万</option>
-                <option value="60">60万</option>
-                <option value="70">70万</option>
-                <option value="80">80万</option>
-                <option value="90">90万</option>
-              </select>
-              <span>〜</span>
-              <select id="s_priceMax">
-                <option value="">最大</option>
-                <option value="10">10万</option>
-                <option value="20">20万</option>
-                <option value="30">30万</option>
-                <option value="40">40万</option>
-                <option value="50">50万</option>
-                <option value="60">60万</option>
-                <option value="70">70万</option>
-                <option value="80">80万</option>
-                <option value="90">90万</option>
-                <option value="100">100万〜</option>
-              </select>
+            <div class="price-histogram" id="priceHistogram"></div>
+            <div class="price-slider-area">
+              <div class="price-slider-track"><div class="price-slider-range" id="priceSliderRange"></div></div>
+              <input type="range" id="s_priceMinRange" class="price-thumb" min="0" max="100" value="0" oninput="onPriceRangeInput('min')">
+              <input type="range" id="s_priceMaxRange" class="price-thumb" min="0" max="100" value="100" oninput="onPriceRangeInput('max')">
+            </div>
+            <div class="price-slider-labels">
+              <span id="priceMinLabel">下限なし</span>
+              <span id="priceMaxLabel">上限なし</span>
             </div>
           </div>
         </div>
@@ -858,6 +865,7 @@ function switchTab(tab) {
     filteredData = [...allData];
     populateMakers();
     populateYears();
+    populatePriceSlider();
     renderAll(filteredData);
     document.getElementById('countLabel').innerHTML = `全 <strong>${allData.length}</strong> 件`;
   } else {
@@ -898,6 +906,7 @@ async function loadSheet(tabKey, silent=false) {
       allData = parsed;
       populateMakers();
       populateYears();
+      populatePriceSlider();
       refreshView(); // 絞り込み・並び順を維持したまま再描画
     }
   } catch(e) {
@@ -923,6 +932,18 @@ function showLoading(on, msg='') {
 
 // ── メーカープルダウン（実データから生成）──
 const MAKER_ORDER = ['ホンダ','ダイハツ','スズキ','日産','スバル','トヨタ','マツダ','三菱','ミツビシ','ニッサン'];
+const MAKER_COLORS = {
+  'ホンダ':'#e2231a', 'ダイハツ':'#c98a00', 'スズキ':'#0075c2', '日産':'#c3002f', 'ニッサン':'#c3002f',
+  'スバル':'#0033a0', 'トヨタ':'#c3002f', 'マツダ':'#2a2a2a', '三菱':'#a4004f', 'ミツビシ':'#a4004f',
+  'いすゞ':'#d4001a', 'レクサス':'#1a1a1a'
+};
+const MAKER_COLOR_FALLBACK = ['#0075c2','#2e7d32','#8e24aa','#ef6c00','#00838f','#6d4c41'];
+function getMakerColor(name) {
+  if (MAKER_COLORS[name]) return MAKER_COLORS[name];
+  let hash = 0;
+  for (let i=0; i<name.length; i++) hash = (hash*31 + name.charCodeAt(i)) | 0;
+  return MAKER_COLOR_FALLBACK[Math.abs(hash) % MAKER_COLOR_FALLBACK.length];
+}
 function populateMakers() {
   const sel = document.getElementById('s_maker');
   if (!sel || sel.tagName !== 'SELECT') return;
@@ -933,7 +954,7 @@ function populateMakers() {
     return (ia<0?99:ia) - (ib<0?99:ib) || a.localeCompare(b,'ja');
   });
   sel.innerHTML = '<option value="">すべてのメーカー</option>' +
-    present.map(m => `<option value="${escHtml(m)}">${escHtml(m)}</option>`).join('');
+    present.map(m => `<option value="${escHtml(m)}" style="color:${getMakerColor(m)};font-weight:600">${escHtml(m)}</option>`).join('');
   if (present.includes(cur)) sel.value = cur;
 }
 
@@ -959,6 +980,56 @@ function populateYears() {
   if (list.includes(curMax)) maxSel.value = curMax;
 }
 
+// ── 金額スライダー（ヒストグラム付き範囲スライダー・実データから生成）──
+let priceDataMax = 100;
+function populatePriceSlider() {
+  const prices = allData.map(r => parsePrice(r[COL.price])/10000).filter(p => p>0);
+  const maxP = prices.length ? Math.max(...prices) : 100;
+  priceDataMax = Math.max(10, Math.ceil(maxP/10)*10);
+  const minEl = document.getElementById('s_priceMinRange');
+  const maxEl = document.getElementById('s_priceMaxRange');
+  minEl.max = priceDataMax;
+  maxEl.max = priceDataMax;
+  if (!minEl.dataset.touched) minEl.value = 0;
+  if (!maxEl.dataset.touched) maxEl.value = priceDataMax;
+  renderPriceHistogram(prices);
+  updatePriceSliderUI();
+}
+function renderPriceHistogram(prices) {
+  const bucketCount = 20;
+  const bucketSize = priceDataMax / bucketCount;
+  const buckets = new Array(bucketCount).fill(0);
+  prices.forEach(p => {
+    const idx = Math.min(bucketCount-1, Math.floor(p / bucketSize));
+    buckets[idx]++;
+  });
+  const maxCount = Math.max(...buckets, 1);
+  document.getElementById('priceHistogram').innerHTML = buckets
+    .map(c => `<div class="hist-bar" style="height:${c ? Math.max(8, c/maxCount*100) : 2}%"></div>`).join('');
+}
+function onPriceRangeInput(which) {
+  const minEl = document.getElementById('s_priceMinRange');
+  const maxEl = document.getElementById('s_priceMaxRange');
+  minEl.dataset.touched = '1';
+  maxEl.dataset.touched = '1';
+  const minV = parseInt(minEl.value), maxV = parseInt(maxEl.value);
+  if (minV > maxV) {
+    if (which === 'min') minEl.value = maxV; else maxEl.value = minV;
+  }
+  updatePriceSliderUI();
+}
+function updatePriceSliderUI() {
+  const minEl = document.getElementById('s_priceMinRange');
+  const maxEl = document.getElementById('s_priceMaxRange');
+  const range = priceDataMax || 100;
+  const minV = parseInt(minEl.value)||0, maxV = parseInt(maxEl.value)||range;
+  const minPct = (minV/range)*100, maxPct = (maxV/range)*100;
+  document.getElementById('priceSliderRange').style.left = minPct + '%';
+  document.getElementById('priceSliderRange').style.right = (100-maxPct) + '%';
+  document.getElementById('priceMinLabel').textContent = minV<=0 ? '下限なし' : minV+'万円';
+  document.getElementById('priceMaxLabel').textContent = maxV>=range ? '上限なし' : maxV+'万円';
+}
+
 // ── SEARCH ──
 function toggleSearch() {
   searchVisible = !searchVisible;
@@ -972,9 +1043,9 @@ function doSearch() {
   const chassis = document.getElementById('s_chassis').value.trim();
   const yMin    = yearToNum(document.getElementById('s_yearMin').value);
   const yMax    = yearToNum(document.getElementById('s_yearMax').value);
-  const pMin    = parseFloat(document.getElementById('s_priceMin').value)||0;
-  let   pMax    = parseFloat(document.getElementById('s_priceMax').value)||Infinity;
-  if (pMax >= 100) pMax = Infinity; // 「100万〜」は上限なし扱い
+  const pMin    = parseInt(document.getElementById('s_priceMinRange').value)||0;
+  let   pMax    = parseInt(document.getElementById('s_priceMaxRange').value);
+  if (!pMax || pMax >= priceDataMax) pMax = Infinity; // 上限まで動かしている場合は上限なし扱い
   filteredData = allData.filter(r => {
     if (maker   && !(r[COL.maker]||'').toLowerCase().includes(maker))   return false;
     if (model   && !(r[COL.model]||'').toLowerCase().includes(model))   return false;
@@ -1004,8 +1075,15 @@ function resetSearch() {
   }
 }
 function resetSearchInputs() {
-  ['s_maker','s_model','s_color','s_chassis','s_yearMin','s_yearMax','s_priceMin','s_priceMax']
+  ['s_maker','s_model','s_color','s_chassis','s_yearMin','s_yearMax']
     .forEach(id => { document.getElementById(id).value=''; });
+  const minEl = document.getElementById('s_priceMinRange');
+  const maxEl = document.getElementById('s_priceMaxRange');
+  delete minEl.dataset.touched;
+  delete maxEl.dataset.touched;
+  minEl.value = 0;
+  maxEl.value = priceDataMax;
+  updatePriceSliderUI();
 }
 function parsePrice(s) { return s ? parseInt(s.replace(/[¥￥,\s円]/g,''))||0 : 0; }
 function formatPrice(s) {
@@ -1038,7 +1116,9 @@ function sortFilteredData() {
 }
 // 絞り込み条件が入力されているか
 function hasActiveSearch() {
-  return ['s_maker','s_model','s_color','s_chassis','s_yearMin','s_yearMax','s_priceMin','s_priceMax']
+  const priceTouched = document.getElementById('s_priceMinRange').dataset.touched
+    || document.getElementById('s_priceMaxRange').dataset.touched;
+  return !!priceTouched || ['s_maker','s_model','s_color','s_chassis','s_yearMin','s_yearMax']
     .some(id => { const el = document.getElementById(id); return el && el.value.trim() !== ''; });
 }
 // 現在の絞り込み・並び順を新しいデータに再適用（自動更新時に使用）
