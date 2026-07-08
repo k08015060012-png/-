@@ -177,13 +177,13 @@
   }
   .search-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .search-field label { display: block; font-size: 11px; font-weight: 600; color: var(--text-2); margin-bottom: 5px; }
-  .search-field input {
+  .search-field input:not([type=range]) {
     width: 100%; padding: 9px 12px;
     border: 1.5px solid var(--border); border-radius: var(--radius-sm);
     font-size: 13px; background: var(--surface-2);
     transition: border-color .15s;
   }
-  .search-field input:focus { outline: none; border-color: var(--primary); background: white; }
+  .search-field input:not([type=range]):focus { outline: none; border-color: var(--primary); background: white; }
   .search-field select {
     width: 100%; padding: 9px 12px;
     border: 1.5px solid var(--border); border-radius: var(--radius-sm);
@@ -1164,7 +1164,7 @@ function renderCards(data) {
     return `<div class="item-card" onclick="showDetail(${i})">
       <div class="item-card-top">
         <div>
-          <div class="item-name">${escHtml(r[COL.maker]||'-')}</div>
+          <div class="item-name" style="${r[COL.maker]?`color:${getMakerColor(r[COL.maker].trim())}`:''}">${escHtml(r[COL.maker]||'-')}</div>
           ${hasModel ? `<div class="item-model">${escHtml(r[COL.model]||'')}</div>` : ''}
         </div>
         <div class="item-price">${price}</div>
@@ -1216,10 +1216,13 @@ function renderTable(data) {
     const badge = color ? `<span class="color-badge" style="background:${fg}22;color:${fg}">${escHtml(color)}</span>` : '-';
     const price = r[COL.price] ? `<span class="price-cell">${escHtml(formatPrice(r[COL.price]))}</span>` : '-';
     const basePriceCell = r[COL.basePrice] ? escHtml(formatPrice(r[COL.basePrice])) : '-';
+    const maker = (r[COL.maker]||'').trim();
+    const mc = maker ? getMakerColor(maker) : '';
+    const makerCell = maker ? `<span class="color-badge" style="background:${mc}22;color:${mc}">${escHtml(maker)}</span>` : '-';
     const extra = [escHtml(r[COL.hp]||''),escHtml(r[COL.carsensor]||''),escHtml(r[COL.goonet]||''),escHtml(formatYen(r[COL.bankin])),escHtml(r[COL.status]||'')];
     const cells = (hasModel
-      ? [r[COL.no],r[COL.maker],r[COL.model],r[COL.year],badge,r[COL.chassis],r[COL.displacement],r[COL.inspection],r[COL.mileage]]
-      : [r[COL.no],r[COL.maker],r[COL.year],badge,r[COL.chassis],r[COL.displacement],r[COL.inspection],r[COL.mileage]])
+      ? [r[COL.no],makerCell,r[COL.model],r[COL.year],badge,r[COL.chassis],r[COL.displacement],r[COL.inspection],r[COL.mileage]]
+      : [r[COL.no],makerCell,r[COL.year],badge,r[COL.chassis],r[COL.displacement],r[COL.inspection],r[COL.mileage]])
       .concat(showBasePrice ? [basePriceCell,price] : [price]).concat(extra);
     return `<tr onclick="showDetail(${i})" style="cursor:pointer">` + cells.map(c => `<td>${c||'-'}</td>`).join('') + '</tr>';
   }).join('');
