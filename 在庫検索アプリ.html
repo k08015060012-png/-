@@ -911,6 +911,7 @@ async function loadSheet(tabKey, silent=false) {
     if (tabKey === currentTab) {
       allData = parsed;
       populateMakers();
+      populateDisplacements();
       populateYears();
       populatePriceSlider();
       refreshView(); // 絞り込み・並び順を維持したまま再描画
