@@ -512,6 +512,10 @@
           <div class="search-field">
             <label>色</label>
             <input type="text" id="s_color" placeholder="黒、白、赤…">
+            <label style="margin-top:8px">排気量</label>
+            <select id="s_displacement">
+              <option value="">すべて</option>
+            </select>
           </div>
           <div class="search-field">
             <label>車台番号（下3桁）</label>
@@ -865,6 +869,7 @@ function switchTab(tab) {
     allData = dataCache[tab];
     filteredData = [...allData];
     populateMakers();
+    populateDisplacements();
     populateYears();
     populatePriceSlider();
     renderAll(filteredData);
@@ -959,6 +964,22 @@ function populateMakers() {
   if (present.includes(cur)) sel.value = cur;
 }
 
+// ── 排気量プルダウン（実データから生成・全角半角ゆれを統一）──
+const DISPLACEMENT_ORDER = ['S','M','L','H','K'];
+function populateDisplacements() {
+  const sel = document.getElementById('s_displacement');
+  if (!sel) return;
+  const cur = sel.value;
+  const present = [...new Set(allData.map(r => toHalfWidth(r[COL.displacement]||'').trim()).filter(Boolean))];
+  present.sort((a,b) => {
+    const ia = DISPLACEMENT_ORDER.indexOf(a), ib = DISPLACEMENT_ORDER.indexOf(b);
+    return (ia<0?99:ia) - (ib<0?99:ib) || a.localeCompare(b,'ja');
+  });
+  sel.innerHTML = '<option value="">すべて</option>' +
+    present.map(d => `<option value="${escHtml(d)}">${escHtml(d)}</option>`).join('');
+  if (present.includes(cur)) sel.value = cur;
+}
+
 // ── 年式プルダウン（元号→西暦に変換して範囲指定）──
 function yearToNum(s) {
   const m = String(s||'').match(/^([HR])(\d+)/);
@@ -1041,6 +1062,7 @@ function doSearch() {
   const maker   = document.getElementById('s_maker').value.trim().toLowerCase();
   const model   = document.getElementById('s_model').value.trim().toLowerCase();
   const color   = document.getElementById('s_color').value.trim().toLowerCase();
+  const displacement = document.getElementById('s_displacement').value;
   const chassis = document.getElementById('s_chassis').value.trim();
   const yMin    = yearToNum(document.getElementById('s_yearMin').value);
   const yMax    = yearToNum(document.getElementById('s_yearMax').value);
@@ -1051,6 +1073,7 @@ function doSearch() {
     if (maker   && !(r[COL.maker]||'').toLowerCase().includes(maker))   return false;
     if (model   && !(r[COL.model]||'').toLowerCase().includes(model))   return false;
     if (color   && !(r[COL.color]||'').toLowerCase().includes(color))   return false;
+    if (displacement && toHalfWidth(r[COL.displacement]||'').trim() !== displacement) return false;
     if (chassis && !(r[COL.chassis]||'').includes(chassis))             return false;
     if (yMin !== null || yMax !== null) {
       const cy = yearToNum(r[COL.year]);
@@ -1076,7 +1099,7 @@ function resetSearch() {
   }
 }
 function resetSearchInputs() {
-  ['s_maker','s_model','s_color','s_chassis','s_yearMin','s_yearMax']
+  ['s_maker','s_model','s_color','s_displacement','s_chassis','s_yearMin','s_yearMax']
     .forEach(id => { document.getElementById(id).value=''; });
   const minEl = document.getElementById('s_priceMinRange');
   const maxEl = document.getElementById('s_priceMaxRange');
@@ -1119,7 +1142,7 @@ function sortFilteredData() {
 function hasActiveSearch() {
   const priceTouched = document.getElementById('s_priceMinRange').dataset.touched
     || document.getElementById('s_priceMaxRange').dataset.touched;
-  return !!priceTouched || ['s_maker','s_model','s_color','s_chassis','s_yearMin','s_yearMax']
+  return !!priceTouched || ['s_maker','s_model','s_color','s_displacement','s_chassis','s_yearMin','s_yearMax']
     .some(id => { const el = document.getElementById(id); return el && el.value.trim() !== ''; });
 }
 // 現在の絞り込み・並び順を新しいデータに再適用（自動更新時に使用）
